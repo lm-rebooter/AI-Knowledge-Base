@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api";
 import { CreateKnowledgeBaseForm } from "@/components/create-knowledge-base-form";
 import { CreateDocumentForm } from "@/components/create-document-form";
 import { MainNav } from "@/components/main-nav";
+import Link from "next/link";
 import type { ApiEnvelope } from "@ai-kb/shared";
 
 type KnowledgeBaseItem = {
@@ -72,10 +73,22 @@ export default async function KnowledgePage() {
           <article key={base.id} className="rounded-2xl border border-[var(--border)] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold">{base.name}</h2>
+                <h2 className="text-xl font-semibold">
+                  <Link className="hover:underline" href={`/knowledge/${base.id}`}>
+                    {base.name}
+                  </Link>
+                </h2>
                 <p className="mt-2 text-sm text-[var(--muted)]">{base.documentCount} 篇文档</p>
               </div>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">已从后端读取</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">已从后端读取</span>
+                <Link
+                  className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-sm"
+                  href={`/knowledge/${base.id}`}
+                >
+                  查看详情
+                </Link>
+              </div>
             </div>
           </article>
         ))}

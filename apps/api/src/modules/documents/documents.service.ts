@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { DocumentStatus } from "@prisma/client";
-import { CreateDocumentDto } from "@ai-kb/shared";
+import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
 
@@ -83,6 +83,60 @@ export class DocumentsService {
       title: document.title,
       status: ingestStatus === "queued" ? "indexed" : "processing",
       ingestStatus
+    };
+  }
+
+  async update(id: string, body: UpdateDocumentDto) {
+    const existingDocument = await this.prisma.document.findUnique({
+      where: {
+        id
+      }
+    });
+
+    if (!existingDocument) {
+      throw new NotFoundException("Document not found.");
+    }
+
+    const updatedDocument = await this.prisma.document.update({
+      where: {
+        id
+      },
+      data: {
+        title: body.title ?? existingDocument.title,
+        content: body.content ?? existingDocument.content,
+        status: body.content ? DocumentStatus.PROCESSING : existingDocument.status
+      }
+    });
+
+    return {
+      id: updatedDocument.id,
+      knowledgeBaseId: updatedDocument.knowledgeBaseId,
+      title: updatedDocument.title,
+      content: updatedDocument.content,
+      status: updatedDocument.status.toLowerCase()
+    };
+  }
+
+  async remove(id: string) {
+    const existingDocument = await this.prisma.document.findUnique({
+      where: {
+        id
+      }
+    });
+
+    if (!existingDocument) {
+      throw new NotFoundException("Document not found.");
+    }
+
+    await this.prisma.document.delete({
+      where: {
+        id
+      }
+    });
+
+    return {
+      id,
+      deleted: true
     };
   }
 }

@@ -20,12 +20,18 @@ type CreatedDocument = {
 
 type CreateDocumentFormProps = {
   knowledgeBases: KnowledgeBaseOption[];
+  defaultKnowledgeBaseId?: string;
+  hideKnowledgeBaseSelect?: boolean;
 };
 
-export function CreateDocumentForm({ knowledgeBases }: CreateDocumentFormProps) {
+export function CreateDocumentForm({
+  knowledgeBases,
+  defaultKnowledgeBaseId,
+  hideKnowledgeBaseSelect = false
+}: CreateDocumentFormProps) {
   const router = useRouter();
   const [form, setForm] = useState({
-    knowledgeBaseId: knowledgeBases[0]?.id ?? "",
+    knowledgeBaseId: defaultKnowledgeBaseId ?? knowledgeBases[0]?.id ?? "",
     title: "",
     content: ""
   });
@@ -57,7 +63,7 @@ export function CreateDocumentForm({ knowledgeBases }: CreateDocumentFormProps) 
           : `文档「${response.data.title}」已写入数据库，AI 入库稍后可补跑。`
       );
       setForm({
-        knowledgeBaseId: knowledgeBases[0]?.id ?? "",
+        knowledgeBaseId: defaultKnowledgeBaseId ?? knowledgeBases[0]?.id ?? "",
         title: "",
         content: ""
       });
@@ -79,23 +85,25 @@ export function CreateDocumentForm({ knowledgeBases }: CreateDocumentFormProps) 
       </div>
 
       <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
-        <select
-          className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
-          value={form.knowledgeBaseId}
-          onChange={(event) =>
-            setForm((current) => ({
-              ...current,
-              knowledgeBaseId: event.target.value
-            }))
-          }
-          required
-        >
-          {knowledgeBases.map((knowledgeBase) => (
-            <option key={knowledgeBase.id} value={knowledgeBase.id}>
-              {knowledgeBase.name}
-            </option>
-          ))}
-        </select>
+        {hideKnowledgeBaseSelect ? null : (
+          <select
+            className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+            value={form.knowledgeBaseId}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                knowledgeBaseId: event.target.value
+              }))
+            }
+            required
+          >
+            {knowledgeBases.map((knowledgeBase) => (
+              <option key={knowledgeBase.id} value={knowledgeBase.id}>
+                {knowledgeBase.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
           placeholder="例如：React Compiler 机制梳理"
