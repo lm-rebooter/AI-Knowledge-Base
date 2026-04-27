@@ -1,5 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UploadedFile,
+  UseInterceptors
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
+import { UploadedDocumentFile } from "./document-file.type";
 import { DocumentsService } from "./documents.service";
 
 @Controller("documents")
@@ -14,6 +26,16 @@ export class DocumentsController {
   @Post()
   create(@Body() body: CreateDocumentDto) {
     return this.documentsService.create(body);
+  }
+
+  @Post("upload")
+  @UseInterceptors(FileInterceptor("file"))
+  upload(
+    @UploadedFile() file: UploadedDocumentFile,
+    @Body("knowledgeBaseId") knowledgeBaseId: string,
+    @Body("title") title?: string
+  ) {
+    return this.documentsService.upload(file, knowledgeBaseId, title);
   }
 
   @Patch(":id")

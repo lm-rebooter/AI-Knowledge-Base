@@ -1,12 +1,15 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { DocumentStatus } from "@prisma/client";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
+import { ParsedPdfDocument, UploadedDocumentFile } from "./document-file.type";
 
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
+  private readonly supportedTextExtensions = [".txt", ".md", ".markdown", ".json", ".csv"];
+  private readonly supportedPdfExtensions = [".pdf"];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,6 +32,25 @@ export class DocumentsService {
   }
 
   async create(body: CreateDocumentDto) {
+    return this.createAndIngestDocument(body);
+  }
+
+  async upload(file: UploadedDocumentFile | undefined, knowledgeBaseId: string, title?: string) {
+    if (!file) {
+      throw new BadRequestException("Please upload a file.");
+    }
+
+    const extractedContent = await this.extractFileContent(file);
+    const derivedTitle = title?.trim() || file.originalname;
+
+    return this.createAndIngestDocument({
+      knowledgeBaseId,
+      title: derivedTitle,
+      content: extractedContent
+    });
+  }
+
+  private async createAndIngestDocument(body: CreateDocumentDto) {
     const knowledgeBase = await this.prisma.knowledgeBase.findUnique({
       where: {
         id: body.knowledgeBaseId
@@ -84,6 +106,56 @@ export class DocumentsService {
       status: ingestStatus === "queued" ? "indexed" : "processing",
       ingestStatus
     };
+  }
+
+  private async extractFileContent(file: UploadedDocumentFile) {
+    const lowerName = file.originalname.toLowerCase();
+    const matchedExtension = this.supportedTextExtensions.find((extension) =>
+      lowerName.endsWith(extension)
+    );
+
+    if (matchedExtension) {
+      const content = file.buffer.toString("utf-8").trim();
+
+      if (content.length < 10) {
+        throw new BadRequestException("The uploaded file content is too short to index.");
+      }
+
+      return content;
+    }
+
+    const matchedPdfExtension = this.supportedPdfExtensions.find((extension) =>
+      lowerName.endsWith(extension)
+    );
+
+    if (matchedPdfExtension) {
+      const content = await this.extractPdfText(file.buffer);
+
+      if (content.length < 10) {
+        throw new BadRequestException("The uploaded PDF content is too short to index.");
+      }
+
+      return content;
+    }
+
+    throw new BadRequestException(
+      "Current upload supports .txt, .md, .markdown, .json, .csv, and .pdf files."
+    );
+  }
+
+  private async extractPdfText(fileBuffer: Buffer) {
+    let pdfParse: ((buffer: Buffer) => Promise<ParsedPdfDocument>) | undefined;
+
+    try {
+      pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<ParsedPdfDocument>;
+    } catch {
+      throw new BadRequestException(
+        "PDF support requires the `pdf-parse` package. Please run `pnpm install` in the project root and try again."
+      );
+    }
+
+    const parsedPdf = await pdfParse(fileBuffer);
+    return parsedPdf.text.trim();
   }
 
   async update(id: string, body: UpdateDocumentDto) {
