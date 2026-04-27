@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String
+  createdAt DateTime  @default(now())
+  chats     Chat[]
+}
+
+model KnowledgeBase {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  documents   Document[]
+  createdAt   DateTime   @default(now())
+}
+
+model Document {
+  id              String        @id @default(cuid())
+  title           String
+  content         String
+  status          DocumentStatus @default(PENDING)
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id])
+  createdAt       DateTime      @default(now())
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  FAILED
+}
