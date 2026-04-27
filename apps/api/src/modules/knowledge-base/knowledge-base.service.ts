@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
+import { CreateKnowledgeBaseDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
@@ -27,5 +28,30 @@ export class KnowledgeBaseService {
       name: knowledgeBase.name,
       documentCount: knowledgeBase._count.documents
     }));
+  }
+
+  async create(body: CreateKnowledgeBaseDto) {
+    const existingKnowledgeBase = await this.prisma.knowledgeBase.findUnique({
+      where: {
+        name: body.name
+      }
+    });
+
+    if (existingKnowledgeBase) {
+      throw new ConflictException("A knowledge base with the same name already exists.");
+    }
+
+    const knowledgeBase = await this.prisma.knowledgeBase.create({
+      data: {
+        name: body.name,
+        description: body.description
+      }
+    });
+
+    return {
+      id: knowledgeBase.id,
+      name: knowledgeBase.name,
+      documentCount: 0
+    };
   }
 }

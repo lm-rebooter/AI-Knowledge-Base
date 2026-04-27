@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "predev": "pnpm --filter @ai-kb/shared build",
     "dev": "next dev --port 3000",
+    "prebuild": "pnpm --filter @ai-kb/shared build",
     "build": "next build",
     "start": "next start --port 3000",
+    "pretypecheck": "pnpm --filter @ai-kb/shared build",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

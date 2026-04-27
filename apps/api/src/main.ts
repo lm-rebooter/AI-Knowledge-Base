@@ -11,6 +11,14 @@ async function bootstrap() {
   // This is useful when the frontend and nginx need a predictable path.
   app.setGlobalPrefix("api");
 
+  // Browser-side form submissions from the Next.js app need CORS enabled.
+  // We scope it to local frontend origins so development stays predictable.
+  app.enableCors({
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true
+  });
+
   // ValidationPipe lets DTO classes guard request shapes consistently.
   app.useGlobalPipes(
     new ValidationPipe({

@@ -1,4 +1,6 @@
 import { apiRequest } from "@/lib/api";
+import { CreateKnowledgeBaseForm } from "@/components/create-knowledge-base-form";
+import { CreateDocumentForm } from "@/components/create-document-form";
 import { MainNav } from "@/components/main-nav";
 import type { ApiEnvelope } from "@ai-kb/shared";
 
@@ -56,6 +58,14 @@ export default async function KnowledgePage() {
           <p className="mt-2 text-sm">{error}</p>
         </section>
       ) : null}
+
+      <CreateKnowledgeBaseForm />
+      <CreateDocumentForm
+        knowledgeBases={data.map((knowledgeBase) => ({
+          id: knowledgeBase.id,
+          name: knowledgeBase.name
+        }))}
+      />
 
       <section className="mt-8 grid gap-4">
         {data.map((base) => (

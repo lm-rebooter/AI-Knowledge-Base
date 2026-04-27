@@ -1,33 +1,88 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { DocumentStatus } from "@prisma/client";
 import { CreateDocumentDto } from "@ai-kb/shared";
+import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly aiService: AiService) {}
+  private readonly logger = new Logger(DocumentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService
+  ) {}
 
   async list() {
-    return [
-      { id: "doc_1", title: "NestJS 架构说明.md", status: "indexed" },
-      { id: "doc_2", title: "前端工程实践.pdf", status: "processing" }
-    ];
+    const documents = await this.prisma.document.findMany({
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return documents.map((document) => ({
+      id: document.id,
+      title: document.title,
+      knowledgeBaseId: document.knowledgeBaseId,
+      status: document.status.toLowerCase()
+    }));
   }
 
   async create(body: CreateDocumentDto) {
-    // In a complete implementation this step would:
-    // 1. persist document metadata in PostgreSQL
-    // 2. store original file in object storage
-    // 3. call the AI service to chunk + embed the content
-    await this.aiService.ingestDocument({
-      knowledgeBaseId: body.knowledgeBaseId,
-      title: body.title,
-      content: body.content
+    const knowledgeBase = await this.prisma.knowledgeBase.findUnique({
+      where: {
+        id: body.knowledgeBaseId
+      }
     });
 
+    if (!knowledgeBase) {
+      throw new NotFoundException("Knowledge base not found.");
+    }
+
+    // The database write is the primary source of truth.
+    // AI ingestion runs afterwards so local CRUD demos still work even when
+    // the Python service is not running yet.
+    const document = await this.prisma.document.create({
+      data: {
+        knowledgeBaseId: body.knowledgeBaseId,
+        title: body.title,
+        content: body.content,
+        status: DocumentStatus.PROCESSING
+      }
+    });
+
+    let ingestStatus: "queued" | "skipped" = "queued";
+
+    try {
+      await this.aiService.ingestDocument({
+        knowledgeBaseId: body.knowledgeBaseId,
+        title: body.title,
+        content: body.content
+      });
+
+      await this.prisma.document.update({
+        where: {
+          id: document.id
+        },
+        data: {
+          status: DocumentStatus.INDEXED
+        }
+      });
+    } catch (error) {
+      ingestStatus = "skipped";
+      this.logger.warn(
+        `AI ingestion skipped for document ${document.id}: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`
+      );
+    }
+
     return {
-      id: "doc_new",
-      ...body,
-      status: "queued"
+      id: document.id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      title: document.title,
+      status: ingestStatus === "queued" ? "indexed" : "processing",
+      ingestStatus
     };
   }
 }
