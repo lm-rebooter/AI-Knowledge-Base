@@ -24,6 +24,40 @@ pnpm dev
 
 如果你暂时不想运行全部服务，也可以单独进入某个应用目录按需启动。
 
+## 单独启动 AI Service
+
+如果你想真正体验“文档 -> 检索 -> 问答”链路，建议把 FastAPI 服务也单独跑起来：
+
+```bash
+cd apps/ai-service
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+启动后你可以先访问：
+
+```bash
+http://localhost:8000/api/health
+```
+
+如果返回：
+
+```json
+{"status":"ok"}
+```
+
+说明 AI 服务已经可用了。
+
+然后完整体验路径就是：
+
+1. 在知识库页新增一个文档
+2. NestJS 调用 `POST /api/ingest`
+3. FastAPI 把切片写进本地 JSON 检索存储
+4. 去 `/chat` 里选择对应知识库提问
+5. 你会看到回答里引用刚刚入库的上下文片段
+
 ## 当前脚手架包含什么
 
 - 带注释的 monorepo 配置

@@ -1,8 +1,20 @@
-def retrieve_context(question: str, knowledge_base_id: str | None) -> list[str]:
-    # In production this module would query FAISS, pgvector, Pinecone, or
-    # another vector store using the question embedding.
+from typing import List, Optional
+
+from app.vectorstore.faiss_store import FaissStore
+
+
+def retrieve_context(question: str, knowledge_base_id: Optional[str]) -> List[str]:
+    # In a production setup this would query a true vector index.
+    # For the starter, we use a tiny JSON-backed retriever so you can see
+    # "ingest -> retrieve -> answer" really work on your own content.
+    store = FaissStore()
+    contexts = store.search(question, knowledge_base_id)
+
+    if contexts:
+        return contexts
+
     scope = knowledge_base_id or "default"
     return [
-        f"[{scope}] 命中文档片段 A，与问题“{question}”主题接近。",
-        f"[{scope}] 命中文档片段 B，补充了实现思路和工程上下文。",
+        f"[{scope}] 当前还没有可检索到的入库片段。",
+        "你可以先新增文档并确保 ai-service 正在运行，然后再回来提问。",
     ]

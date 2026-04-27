@@ -1,31 +1,44 @@
-const messages = [
-  { role: "user", content: "帮我总结一下这份 NestJS 架构文档的重点。" },
-  { role: "assistant", content: "可以从模块边界、鉴权流、数据库访问和 AI 服务编排四个角度概括。" }
-];
+import { apiRequest } from "@/lib/api";
+import { ChatWorkspace } from "@/components/chat-workspace";
+import { MainNav } from "@/components/main-nav";
+import type { ApiEnvelope } from "@ai-kb/shared";
 
-export default function ChatPage() {
+type KnowledgeBaseItem = {
+  id: string;
+  name: string;
+  documentCount: number;
+};
+
+async function getKnowledgeBases() {
+  try {
+    const response = await apiRequest<ApiEnvelope<KnowledgeBaseItem[]>>("/knowledge-bases", {
+      cache: "no-store"
+    });
+
+    return response.data;
+  } catch {
+    return [];
+  }
+}
+
+export default async function ChatPage() {
+  const knowledgeBases = await getKnowledgeBases();
+
   return (
     <main className="mx-auto grid min-h-screen max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[280px_1fr]">
-      <aside className="rounded-3xl border border-[var(--border)] bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold">会话列表</h2>
-        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">默认演示会话</div>
-      </aside>
-      <section className="rounded-3xl border border-[var(--border)] bg-white p-6 shadow-sm">
-        <h1 className="text-3xl font-bold">AI Chat</h1>
-        <div className="mt-6 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={`${message.role}-${message.content}`}
-              className={`rounded-2xl p-4 ${
-                message.role === "user" ? "bg-slate-100" : "bg-blue-50"
-              }`}
-            >
-              <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">{message.role}</p>
-              <p className="mt-2 leading-7">{message.content}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <MainNav />
+      <div className="lg:col-span-2 grid gap-6 lg:grid-cols-[280px_1fr]">
+        <ChatWorkspace
+          knowledgeBases={
+            knowledgeBases.length > 0
+              ? knowledgeBases.map((knowledgeBase) => ({
+                  id: knowledgeBase.id,
+                  name: knowledgeBase.name
+                }))
+              : [{ id: "", name: "当前没有知识库" }]
+          }
+        />
+      </div>
     </main>
   );
 }
