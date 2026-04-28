@@ -46,36 +46,42 @@ export default async function KnowledgeBaseDetailPage({
   const knowledgeBase = await getKnowledgeBaseDetail(id);
 
   return (
-    <main className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
+    <main className="mx-auto max-w-7xl px-5 py-5 lg:px-8 lg:py-6">
       <MainNav />
 
-      <section className="rounded-[40px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] p-8 shadow-[0_28px_70px_rgba(31,26,20,0.08)] backdrop-blur lg:p-10">
-        <Link className="text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]" href="/knowledge">
-          返回知识库列表
-        </Link>
-        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] lg:text-5xl">{knowledgeBase.name}</h1>
-        <p className="mt-3 max-w-3xl leading-7 text-[var(--muted)]">
-          {knowledgeBase.description || "这个知识库还没有补充描述，你可以后续继续扩展编辑能力。"}
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <span className="rounded-full border border-[var(--border)] bg-white/84 px-4 py-2 text-sm">
-            当前文档数：{knowledgeBase.documentCount}
-          </span>
+      <section className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] p-5 shadow-[0_20px_50px_rgba(31,26,20,0.08)] backdrop-blur">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Link className="text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]" href="/knowledge">
+              返回知识库列表
+            </Link>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em]">{knowledgeBase.name}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              {knowledgeBase.description || "当前知识库暂无补充描述。"}
+            </p>
+          </div>
+
+          <div className="rounded-[18px] border border-[var(--border)] bg-white/84 px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">documents</p>
+            <p className="mt-1 text-2xl font-semibold tracking-[-0.05em]">{knowledgeBase.documentCount}</p>
+          </div>
         </div>
       </section>
 
-      <CreateDocumentForm
-        defaultKnowledgeBaseId={knowledgeBase.id}
-        hideKnowledgeBaseSelect
-        knowledgeBases={[{ id: knowledgeBase.id, name: knowledgeBase.name }]}
-      />
+      <section className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <CreateDocumentForm
+          defaultKnowledgeBaseId={knowledgeBase.id}
+          hideKnowledgeBaseSelect
+          knowledgeBases={[{ id: knowledgeBase.id, name: knowledgeBase.name }]}
+        />
 
-      <KnowledgeBaseSettings
-        description={knowledgeBase.description}
-        documentCount={knowledgeBase.documentCount}
-        id={knowledgeBase.id}
-        name={knowledgeBase.name}
-      />
+        <KnowledgeBaseSettings
+          description={knowledgeBase.description}
+          documentCount={knowledgeBase.documentCount}
+          id={knowledgeBase.id}
+          name={knowledgeBase.name}
+        />
+      </section>
 
       <DocumentManager documents={knowledgeBase.documents} />
     </main>

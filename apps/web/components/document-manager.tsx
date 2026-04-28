@@ -112,11 +112,11 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
   }
 
   return (
-    <section className="mt-8 rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-6 shadow-[0_20px_50px_rgba(31,26,20,0.06)] backdrop-blur lg:p-7">
+    <section className="mt-5 rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-5 shadow-[0_20px_50px_rgba(31,26,20,0.06)] backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-strong)]">Documents</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">文档列表</h2>
+          <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">文档列表</h2>
         </div>
         <div className="flex flex-col items-end gap-2">
           {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
@@ -124,7 +124,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
         </div>
       </div>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-4 space-y-3">
         {documents.map((document) => {
           const isEditing = editingId === document.id;
           const isBusy = busyId === document.id;
@@ -132,7 +132,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
           return (
             <article
               key={document.id}
-              className="rounded-[26px] border border-[var(--border)] bg-white/72 p-5 shadow-[0_12px_32px_rgba(31,26,20,0.04)]"
+              className="rounded-[22px] border border-[var(--border)] bg-white/72 p-4 shadow-[0_10px_24px_rgba(31,26,20,0.04)]"
             >
               {isEditing ? (
                 <div className="space-y-3">
@@ -169,14 +169,16 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="max-w-3xl">
+                  <div className="min-w-0 max-w-3xl flex-1">
                     <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="text-xl font-semibold">{document.title}</h3>
+                      <h3 className="text-lg font-semibold">{document.title}</h3>
                       <span className="rounded-full bg-white px-3 py-1 text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
                         {document.status}
                       </span>
                     </div>
-                    <p className="mt-3 whitespace-pre-wrap leading-7 text-slate-700">{document.content}</p>
+                    <div className="mt-3 max-h-64 overflow-y-auto rounded-[16px] bg-[var(--ink-soft)] px-4 py-3">
+                      <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{document.content}</p>
+                    </div>
                     {document.fileUrl && document.fileType === "application/pdf" ? (
                       <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
                         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 text-sm">
@@ -191,7 +193,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                           </a>
                         </div>
                         <iframe
-                          className="h-[420px] w-full bg-white"
+                          className="h-[320px] w-full bg-white"
                           src={document.fileUrl}
                           title={document.originalFileName ?? document.title}
                         />
@@ -211,14 +213,14 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
 
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-full border border-[var(--border)] bg-white px-4 py-2 text-sm"
+                      className="rounded-full border border-[var(--border)] bg-white px-4 py-1.5 text-sm"
                       onClick={() => startEditing(document)}
                       type="button"
                     >
                       编辑
                     </button>
                     <button
-                      className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 disabled:opacity-60"
+                      className="rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm text-blue-700 disabled:opacity-60"
                       disabled={isBusy}
                       onClick={() => handleReindex(document.id)}
                       type="button"
@@ -226,7 +228,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                       {isBusy ? "处理中..." : "重新入库"}
                     </button>
                     <button
-                      className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 disabled:opacity-60"
+                      className="rounded-full border border-red-200 bg-red-50 px-4 py-1.5 text-sm text-red-700 disabled:opacity-60"
                       disabled={isBusy}
                       onClick={() => handleDelete(document.id)}
                       type="button"

@@ -64,12 +64,13 @@ export default async function DashboardPage() {
   const { knowledgeBases, documents, chatSummary } = await getDashboardData();
   const indexedCount = documents.filter((document) => document.status === "indexed").length;
   const processingCount = documents.filter((document) => document.status === "processing").length;
+  const completionRate =
+    documents.length > 0 ? Math.round((indexedCount / documents.length) * 100) : 100;
 
   const dashboardStats = [
-    { label: "知识库数量", value: String(knowledgeBases.length), detail: "当前已上线的知识空间" },
-    { label: "文档总量", value: String(documents.length), detail: "已接入并可管理的内容资产" },
-    { label: "聊天会话", value: String(chatSummary.conversationCount), detail: "已留存的问答会话数量" },
-    { label: "兜底回答", value: String(chatSummary.fallbackCount), detail: "用于排查 AI 服务稳定性的提示数" }
+    { label: "知识库", value: String(knowledgeBases.length), detail: "已上线空间" },
+    { label: "文档", value: String(documents.length), detail: "内容资产总量" },
+    { label: "会话", value: String(chatSummary.conversationCount), detail: "留存会话数" }
   ];
 
   return (
@@ -77,28 +78,40 @@ export default async function DashboardPage() {
       <MainNav />
 
       <section className="overflow-hidden rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] shadow-[0_24px_60px_rgba(31,26,20,0.08)] backdrop-blur">
-        <div className="grid gap-5 px-6 py-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-6">
+        <div className="grid gap-5 px-6 py-5 lg:grid-cols-[1.25fr_0.75fr] lg:px-8 lg:py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--brand-strong)]">
               Operations Dashboard
             </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.06em]">知识运营总览</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted)]">
-              聚合知识库、文档与问答数据，帮助团队快速判断内容沉淀、索引状态和问答稳定性。
-            </p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.06em]">工作台总览</h1>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {dashboardStats.map((stat) => (
+                <article
+                  key={stat.label}
+                  className="rounded-[18px] border border-[var(--border)] bg-white/82 px-4 py-3"
+                >
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{stat.label}</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-[-0.05em]">{stat.value}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{stat.detail}</p>
+                </article>
+              ))}
+            </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {dashboardStats.map((stat) => (
-              <article
-                key={stat.label}
-                className="rounded-[22px] border border-[var(--border)] bg-white/82 p-4 shadow-[0_10px_24px_rgba(31,26,20,0.05)]"
-              >
-                <p className="text-sm text-[var(--muted)]">{stat.label}</p>
-                <p className="mt-2 text-3xl font-semibold tracking-[-0.05em]">{stat.value}</p>
-                <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{stat.detail}</p>
-              </article>
-            ))}
+          <div className="rounded-[22px] border border-[var(--border)] bg-white/82 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+              索引完成度
+            </p>
+            <p className="mt-2 text-3xl font-semibold tracking-[-0.05em]">{completionRate}%</p>
+            <div className="mt-4 h-2 rounded-full bg-[var(--ink-soft)]">
+              <div
+                className="h-2 rounded-full bg-[var(--foreground)]"
+                style={{ width: `${completionRate}%` }}
+              />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
+              已完成索引 {indexedCount} 篇，处理中 {processingCount} 篇。最近问答更新：{formatLastAskedAt(chatSummary.lastAskedAt)}
+            </p>
           </div>
         </div>
       </section>
@@ -158,7 +171,12 @@ export default async function DashboardPage() {
           </section>
 
           <section className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-5 shadow-[0_20px_50px_rgba(31,26,20,0.08)] backdrop-blur">
-            <h2 className="text-xl font-semibold tracking-[-0.04em]">问答运行观察</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-xl font-semibold tracking-[-0.04em]">问答运行观察</h2>
+              <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--muted)]">
+                建议管理员查看
+              </span>
+            </div>
             <div className="mt-4 space-y-3 text-sm leading-7 text-[var(--muted)]">
               <div className="flex items-center justify-between gap-4 rounded-[18px] bg-white/84 px-4 py-2.5">
                 <span>提问总数</span>
@@ -169,7 +187,7 @@ export default async function DashboardPage() {
                 <strong className="text-lg text-[var(--foreground)]">{chatSummary.conversationCount}</strong>
               </div>
               <div className="flex items-center justify-between gap-4 rounded-[18px] bg-white/84 px-4 py-2.5">
-                <span>后端兜底次数</span>
+                <span>兜底回答次数</span>
                 <strong className="text-lg text-[var(--foreground)]">{chatSummary.fallbackCount}</strong>
               </div>
             </div>

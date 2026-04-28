@@ -1,5 +1,32 @@
 [
   {
+    "id": "chat_1777345263224",
+    "createdAt": "2026-04-28T03:01:03.224Z",
+    "conversationId": "session-1777343890537-v78wan",
+    "knowledgeBaseId": "cmoi0b6an000013ba9gr2xpsh",
+    "question": "什么是 大模型",
+    "answer": "示例回答：你问的是“什么是 大模型”。 我当前基于知识片段给出的总结线索是：[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: 2024/8/11 19:53\n大模型（LLMs）agent 面\nhttps://articles.zsxq.com/id_8f0nbpwbw4ww.html1/8\n大模型（LLMs）agent 面\n来自： AiGC面试宝典\n宁静致远2024年01月27日 19:44\n一、什么是 大模型（LLMs）agent？\n大模型（LLMs）agent 是一种超越简单文本生成的人工智能系统。它使用大型语言模型 | [cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: （LLM）作为其核心计算引\n擎，使其能够进行对话、执行任务、推理并展现一定程度的自主性。简而言之，代理是一个具有复杂推理能力、记忆\n和执行任务手段的系统。\n二、大模型（LLMs）agent 有哪些部分组成？\n在LLM赋能的自主agent系统中(LLM Agent)，LLM充当agent大脑的角色，并与若干关键组件协作 。\n•大模型（LLMs）agent 面\n•一、什么是 大模型（LLMs）agen。 后续你可以在这里替换成 OpenAI、Azure OpenAI 或其他模型调用。",
+    "contexts": [
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: 2024/8/11 19:53\n大模型（LLMs）agent 面\nhttps://articles.zsxq.com/id_8f0nbpwbw4ww.html1/8\n大模型（LLMs）agent 面\n来自： AiGC面试宝典\n宁静致远2024年01月27日 19:44\n一、什么是 大模型（LLMs）agent？\n大模型（LLMs）agent 是一种超越简单文本生成的人工智能系统。它使用大型语言模型",
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: （LLM）作为其核心计算引\n擎，使其能够进行对话、执行任务、推理并展现一定程度的自主性。简而言之，代理是一个具有复杂推理能力、记忆\n和执行任务手段的系统。\n二、大模型（LLMs）agent 有哪些部分组成？\n在LLM赋能的自主agent系统中(LLM Agent)，LLM充当agent大脑的角色，并与若干关键组件协作 。\n•大模型（LLMs）agent 面\n•一、什么是 大模型（LLMs）agen",
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: 这些步骤是什么并提前规划。\n2.1.1 拆解子目标和任务分解\n2.1.1.1 如何进行 拆解子目标和任务分解？\n2.1.1.2 拆解子目标和任务分解 有哪些方法？\n注：无论是CoT还是ToT，本质上是通过Prompt的精心设计，激发出模型原有的Metacognition\n只是如何通过某条神经元的线索能更加精准的调动出大脑中最擅长Planning的部分\n•拆解子目标和任务分解：Agent能够将大型任"
+    ],
+    "fallbackUsed": false
+  },
+  {
+    "id": "chat_1777344883234",
+    "createdAt": "2026-04-28T02:54:43.234Z",
+    "conversationId": "session-1777343890537-v78wan",
+    "knowledgeBaseId": "cmohzbaeo000114obzsm28fl2",
+    "question": "Nest是什么",
+    "answer": "示例回答：你问的是“Nest是什么”。 我当前基于知识片段给出的总结线索是：[cmohzbaeo000114obzsm28fl2] 当前还没有可检索到的入库片段。 | 你可以先新增文档并确保 ai-service 正在运行，然后再回来提问。。 后续你可以在这里替换成 OpenAI、Azure OpenAI 或其他模型调用。",
+    "contexts": [
+      "[cmohzbaeo000114obzsm28fl2] 当前还没有可检索到的入库片段。",
+      "你可以先新增文档并确保 ai-service 正在运行，然后再回来提问。"
+    ],
+    "fallbackUsed": false
+  },
+  {
     "id": "chat_1777343531604",
     "createdAt": "2026-04-28T02:32:11.604Z",
     "conversationId": "session-1777343225396-epq56e",
