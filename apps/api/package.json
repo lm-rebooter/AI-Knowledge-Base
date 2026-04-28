@@ -15,7 +15,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:db:push": "prisma db push",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "db:tables": "ts-node prisma/list-tables.ts",
+    "db:reset": "ts-node prisma/reset.ts",
+    "db:reset:seed": "pnpm db:reset && pnpm prisma:seed"
   },
   "dependencies": {
     "@ai-kb/shared": "workspace:*",

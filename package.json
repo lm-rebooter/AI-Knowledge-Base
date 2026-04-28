@@ -8,6 +8,11 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "db:studio": "pnpm --filter @ai-kb/api prisma:studio",
+    "db:seed": "pnpm --filter @ai-kb/api prisma:seed",
+    "db:tables": "pnpm --filter @ai-kb/api db:tables",
+    "db:reset": "pnpm --filter @ai-kb/api db:reset",
+    "db:reset:seed": "pnpm --filter @ai-kb/api db:reset:seed",
     "format": "prettier --write ."
   },
   "devDependencies": {

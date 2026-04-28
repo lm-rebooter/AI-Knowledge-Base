@@ -41,12 +41,10 @@ export default async function KnowledgePage() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <MainNav />
 
-      <section className="rounded-3xl border border-[var(--border)] bg-white p-8 shadow-sm">
-        <h1 className="text-4xl font-bold">Knowledge Base</h1>
+      <section className="rounded-[36px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-8 shadow-[0_24px_60px_rgba(31,26,20,0.08)] backdrop-blur">
+        <h1 className="text-4xl font-semibold tracking-[-0.05em]">知识库总览</h1>
         <p className="mt-3 max-w-2xl leading-7 text-[var(--muted)]">
-          这个页面现在已经不是写死的演示数据了，而是会真实请求 NestJS 的
-          <code className="mx-1 rounded bg-slate-100 px-2 py-1 text-sm">/api/knowledge-bases</code>
-          接口。
+          在这里管理知识库、录入文档和进入详情页处理具体内容。当前列表直接读取后端实时数据。
         </p>
       </section>
 
@@ -96,7 +94,7 @@ export default async function KnowledgePage() {
 
       {!error && data.length === 0 ? (
         <section className="mt-8 rounded-3xl border border-dashed border-[var(--border)] bg-slate-50 p-6 text-[var(--muted)]">
-          当前还没有知识库数据，后续你接上 Prisma 查询后，这里会展示数据库里的真实记录。
+          当前还没有知识库数据。创建第一个知识库后，这里会开始显示团队知识资产。
         </section>
       ) : null}
     </main>

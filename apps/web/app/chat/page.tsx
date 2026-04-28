@@ -25,9 +25,9 @@ export default async function ChatPage() {
   const knowledgeBases = await getKnowledgeBases();
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[280px_1fr]">
+    <main className="mx-auto min-h-screen max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
       <MainNav />
-      <div className="lg:col-span-2 grid gap-6 lg:grid-cols-[280px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <ChatWorkspace
           knowledgeBases={
             knowledgeBases.length > 0

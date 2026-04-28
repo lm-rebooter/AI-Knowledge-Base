@@ -7,5 +7,9 @@ export class ChatRequestDto {
 
   @IsOptional()
   @IsString()
+  conversationId?: string;
+
+  @IsOptional()
+  @IsString()
   knowledgeBaseId?: string;
 }

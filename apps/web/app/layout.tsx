@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "AI Knowledge Base",
-  description: "A full-stack AI knowledge base starter for learning modern web architecture."
+  description: "Enterprise-ready AI knowledge base for document indexing, retrieval, and operational Q&A."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
