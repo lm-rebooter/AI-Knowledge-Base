@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Knowledge Base Architecture</title>
+    <style>
+      :root {
+        --bg: #f4efe7;
+        --panel: rgba(255, 255, 255, 0.78);
+        --line: #d7cdc0;
+        --ink: #1f1a16;
+        --muted: #6f665d;
+        --accent: #b55c2f;
+        --accent-soft: #f2dfd3;
+        --shadow: 0 24px 60px rgba(37, 29, 19, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(181, 92, 47, 0.12), transparent 26%),
+          radial-gradient(circle at right 20%, rgba(120, 83, 50, 0.1), transparent 18%),
+          linear-gradient(180deg, #f8f4ee 0%, var(--bg) 100%);
+      }
+
+      .page {
+        width: min(1200px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 40px 0 56px;
+      }
+
+      .hero {
+        padding: 28px;
+        border: 1px solid rgba(122, 108, 92, 0.16);
+        border-radius: 28px;
+        background: var(--panel);
+        backdrop-filter: blur(18px);
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 12px 0 0;
+        font-size: clamp(36px, 7vw, 64px);
+        line-height: 0.95;
+        letter-spacing: -0.06em;
+      }
+
+      .subtitle {
+        max-width: 760px;
+        margin: 18px 0 0;
+        font-size: 16px;
+        line-height: 1.8;
+        color: var(--muted);
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .legend span {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid rgba(122, 108, 92, 0.16);
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .board {
+        margin-top: 24px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .row {
+        display: grid;
+        gap: 18px;
+      }
+
+      .row.top {
+        grid-template-columns: 1fr 1.2fr 1fr;
+      }
+
+      .row.bottom {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .card {
+        position: relative;
+        padding: 22px;
+        min-height: 220px;
+        border-radius: 26px;
+        border: 1px solid rgba(122, 108, 92, 0.16);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .card::after {
+        content: "";
+        position: absolute;
+        inset: 12px;
+        border-radius: 20px;
+        border: 1px dashed rgba(122, 108, 92, 0.16);
+        pointer-events: none;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: -0.05em;
+      }
+
+      .card p {
+        margin: 10px 0 0;
+        line-height: 1.75;
+        color: var(--muted);
+      }
+
+      .tag {
+        display: inline-flex;
+        margin-bottom: 10px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      ul {
+        margin: 14px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+
+      .flow {
+        position: relative;
+        padding: 24px;
+        border-radius: 30px;
+        border: 1px solid rgba(122, 108, 92, 0.16);
+        background: rgba(255, 255, 255, 0.7);
+        box-shadow: var(--shadow);
+      }
+
+      .flow h3 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        letter-spacing: -0.04em;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+      }
+
+      .step {
+        padding: 16px;
+        border-radius: 20px;
+        background: #fff;
+        border: 1px solid rgba(122, 108, 92, 0.14);
+      }
+
+      .step strong {
+        display: block;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .step p {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        font-size: 14px;
+        line-height: 1.75;
+        color: var(--muted);
+      }
+
+      @media (max-width: 980px) {
+        .row.top,
+        .row.bottom,
+        .steps {
+          grid-template-columns: 1fr;
+        }
+
+        .card {
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Architecture Map</p>
+        <h1>AI Knowledge Base</h1>
+        <p class="subtitle">
+          这个项目把 UI、主业务后端、AI 能力和共享契约拆成了 4 个清晰层次。新人学习时最重要的不是一口气看完所有代码，而是先看清每一层只负责什么，再顺着“新增文档”或“聊天问答”两条主链路往下读。
+        </p>
+        <div class="legend">
+          <span>Web: 页面与交互</span>
+          <span>API: 业务编排与数据库</span>
+          <span>AI Service: RAG 与 LLM</span>
+          <span>Shared: DTO 与类型契约</span>
+        </div>
+      </section>
+
+      <section class="board">
+        <div class="row top">
+          <article class="card">
+            <div class="tag">apps/web</div>
+            <h2>Next.js Web</h2>
+            <p>负责所有用户可见页面、表单提交、聊天界面、知识库管理和工作台展示。</p>
+            <ul>
+              <li>页面路由: `app/`</li>
+              <li>业务组件: `components/`</li>
+              <li>请求封装: `lib/api.ts`</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <div class="tag">apps/api</div>
+            <h2>NestJS API</h2>
+            <p>负责登录认证、知识库 CRUD、文档解析与入库编排、聊天摘要统计以及数据库访问。</p>
+            <ul>
+              <li>主入口: `src/main.ts`</li>
+              <li>根模块: `src/app.module.ts`</li>
+              <li>文档模块: `src/modules/documents`</li>
+              <li>聊天模块: `src/modules/chat`</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <div class="tag">apps/ai-service</div>
+            <h2>FastAPI AI Service</h2>
+            <p>负责文档切片、Embedding、向量检索、上下文拼装和最终的 RAG 问答生成。</p>
+            <ul>
+              <li>HTTP 接口: `app/api/*`</li>
+              <li>RAG 主链路: `app/rag/*`</li>
+              <li>向量存储: `app/vectorstore/*`</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="row bottom">
+          <article class="card">
+            <div class="tag">packages/shared</div>
+            <h2>Shared Contracts</h2>
+            <p>前后端共享 DTO、常量和响应类型，避免请求体和响应结构在多端漂移。</p>
+          </article>
+
+          <article class="card">
+            <div class="tag">PostgreSQL</div>
+            <h2>Structured Data</h2>
+            <p>保存用户、知识库、文档正文、文档状态以及其他结构化业务数据。</p>
+          </article>
+
+          <article class="card">
+            <div class="tag">Local Files / Vector Store</div>
+            <h2>Runtime Storage</h2>
+            <p>开发阶段保留本地上传文件、聊天 JSON 索引，以及 FAISS / Pinecone 相关向量数据。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="flow">
+        <h3>Flow A: 新增文档</h3>
+        <div class="steps">
+          <div class="step">
+            <strong>1. Web</strong>
+            <p>用户在知识库页面上传 PDF 或粘贴文本。</p>
+          </div>
+          <div class="step">
+            <strong>2. API</strong>
+            <p>NestJS 解析文件、清洗文本、写入 PostgreSQL。</p>
+          </div>
+          <div class="step">
+            <strong>3. AI Call</strong>
+            <p>API 调用 FastAPI 的 `/api/ingest`。</p>
+          </div>
+          <div class="step">
+            <strong>4. RAG</strong>
+            <p>AI Service 切片、Embedding、写入向量存储。</p>
+          </div>
+          <div class="step">
+            <strong>5. Result</strong>
+            <p>文档变成可以在聊天里被检索命中的知识。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="flow">
+        <h3>Flow B: 聊天问答</h3>
+        <div class="steps">
+          <div class="step">
+            <strong>1. Web</strong>
+            <p>用户在聊天页选择知识库并发起提问。</p>
+          </div>
+          <div class="step">
+            <strong>2. API</strong>
+            <p>NestJS 保存会话上下文并转发问题。</p>
+          </div>
+          <div class="step">
+            <strong>3. Retrieve</strong>
+            <p>AI Service 从向量存储召回最相关片段。</p>
+          </div>
+          <div class="step">
+            <strong>4. Generate</strong>
+            <p>大模型结合检索上下文生成回答。</p>
+          </div>
+          <div class="step">
+            <strong>5. Return</strong>
+            <p>答案回到 Web，并同步更新本地会话与统计。</p>
+          </div>
+        </div>
+        <p class="footer-note">
+          建议新人的第一条阅读路径是 “新增文档”，第二条再看 “聊天问答”。这样能最快理解项目的真正主链。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
