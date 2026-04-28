@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
-import { ChatRequestDto } from "@ai-kb/shared";
+import { ChatRequestDto, ChatSessionSyncDto } from "@ai-kb/shared";
 import { ChatService } from "./chat.service";
 
 @Controller("chat")
@@ -14,5 +14,10 @@ export class ChatController {
   @Post()
   ask(@Body() body: ChatRequestDto) {
     return this.chatService.ask(body);
+  }
+
+  @Post("sessions/sync")
+  syncSessions(@Body() body: ChatSessionSyncDto) {
+    return this.chatService.syncSessions(body);
   }
 }

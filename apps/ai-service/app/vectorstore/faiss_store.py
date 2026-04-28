@@ -66,6 +66,11 @@ def _save_entries(entries: List[Dict]) -> None:
     )
 
 
+def _normalize_text(text: str) -> str:
+    """压缩多余空白，便于展示拼接后的连续上下文。"""
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _tokenize(text: str) -> Set[str]:
     """
     轻量级分词器
@@ -83,9 +88,98 @@ def _tokenize(text: str) -> Set[str]:
     【生产环境建议】
     使用 jieba 分词或直接调用 Embedding API 让模型处理语义
     """
-    # 匹配：英文字母数字下划线组合，或单个中文字符
-    words = re.findall(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]", text.lower())
+    normalized = text.lower()
+    words = set(re.findall(r"[A-Za-z0-9_]+", normalized))
+
+    # 为中文补充“词组级”召回，避免只按单字命中导致目录和正文难以区分。
+    chinese_segments = re.findall(r"[\u4e00-\u9fff]{2,}", normalized)
+    for segment in chinese_segments:
+        words.add(segment)
+        for size in (2, 3, 4):
+            if len(segment) < size:
+                continue
+            for start in range(0, len(segment) - size + 1):
+                words.add(segment[start : start + size])
+
+    # 保留单字，兼容短问题，但不作为唯一信号。
+    words.update(re.findall(r"[\u4e00-\u9fff]", normalized))
     return {word for word in words if word.strip()}
+
+
+def _is_toc_like(chunk: str) -> bool:
+    """
+    判断片段是否更像目录、页码导航，而不是正文答案。
+    """
+    normalized = chunk.replace(" ", "")
+    question_count = len(re.findall(r"第\d+题", normalized))
+    dotted_leader_count = len(re.findall(r"[.。·…]{6,}", normalized))
+    has_catalog = "目录" in normalized
+    has_many_page_numbers = len(re.findall(r"\n?\d{1,3}\n", chunk)) >= 3
+    return has_catalog or question_count >= 3 or dotted_leader_count >= 2 or has_many_page_numbers
+
+
+def _quality_score(chunk: str) -> int:
+    """
+    片段质量分，正文高，目录/导航低。
+    """
+    score = 0
+    if _is_toc_like(chunk):
+        score -= 12
+
+    if "function" in chunk.lower() or "=>" in chunk or "return" in chunk:
+        score += 2
+
+    if any(keyword in chunk for keyword in ["区别", "实现", "步骤", "原理", "作用"]):
+        score += 2
+
+    return score
+
+
+def _trim_to_question_anchor(text: str, question: str) -> str:
+    """
+    把拼接后的上下文裁剪到真正与问题相关的起点，避免把上一题的尾巴一起带出来。
+    """
+    normalized_text = text.strip()
+    if not normalized_text:
+        return normalized_text
+
+    candidate_tokens = sorted(
+        {
+            token
+            for token in _tokenize(question)
+            if len(token) >= 2 and not token.isdigit()
+        },
+        key=len,
+        reverse=True,
+    )
+
+    anchor_index = -1
+    for token in candidate_tokens:
+        token_index = normalized_text.find(token)
+        if token_index != -1 and (anchor_index == -1 or token_index < anchor_index):
+            anchor_index = token_index
+
+    if anchor_index == -1:
+        return normalized_text
+
+    heading_matches = list(re.finditer(r"第\d+题[:：]?", normalized_text))
+    line_start = -1
+    for match in heading_matches:
+        if match.start() <= anchor_index:
+            line_start = match.start()
+        else:
+            break
+
+    if line_start == -1:
+        line_start = normalized_text.rfind("\n", 0, anchor_index)
+    if line_start == -1:
+        line_start = normalized_text.rfind("。", 0, anchor_index)
+    if line_start == -1:
+        line_start = 0
+    elif line_start != 0:
+        line_start += 1
+
+    return normalized_text[line_start:].strip()
 
 
 class FaissStore:
@@ -140,18 +234,82 @@ class FaissStore:
             ]
 
         # 【批量插入】将新片段和向量添加到列表
+        chunk_count = len(chunks)
         filtered_entries.extend(
             {
                 "documentId": document_id,
                 "knowledgeBaseId": knowledge_base_id,
                 "title": title,
-                "chunk": chunk,      # 文本片段
-                "vector": vector,    # 对应的向量表示
+                "chunk": chunk,
+                "vector": vector,
+                "chunkIndex": index,
+                "chunkCount": chunk_count,
             }
-            for chunk, vector in zip(chunks, vectors)
+            for index, (chunk, vector) in enumerate(zip(chunks, vectors))
         )
 
         _save_entries(filtered_entries)
+
+    def _group_entries_by_document(self, entries: List[Dict]) -> Dict[str, List[Dict]]:
+        grouped_entries: Dict[str, List[Dict]] = {}
+
+        for fallback_index, entry in enumerate(entries):
+            document_key = (
+                entry.get("documentId")
+                or f"{entry['knowledgeBaseId']}::{entry['title']}"
+            )
+            grouped_entries.setdefault(document_key, []).append(
+                {
+                    **entry,
+                    "_fallbackIndex": fallback_index,
+                }
+            )
+
+        for document_entries in grouped_entries.values():
+            document_entries.sort(
+                key=lambda item: (
+                    item.get("chunkIndex", item["_fallbackIndex"]),
+                    item["_fallbackIndex"],
+                )
+            )
+
+        return grouped_entries
+
+    def _expand_context(self, matched_entry: Dict, document_entries: List[Dict], question: str) -> str:
+        """
+        将命中的片段与前后相邻片段拼接，避免只返回答案的开头一小截。
+        """
+        matched_chunk_index = matched_entry.get("chunkIndex")
+        matched_document_id = matched_entry.get("documentId")
+        matched_title = matched_entry.get("title")
+        matched_chunk = matched_entry.get("chunk")
+
+        matched_index = 0
+        for index, entry in enumerate(document_entries):
+            if matched_chunk_index is not None and entry.get("chunkIndex") == matched_chunk_index:
+                matched_index = index
+                break
+
+            if (
+                entry.get("documentId") == matched_document_id
+                and entry.get("title") == matched_title
+                and entry.get("chunk") == matched_chunk
+            ):
+                matched_index = index
+                break
+
+        start_index = max(matched_index - 1, 0)
+        end_index = min(matched_index + 3, len(document_entries))
+        window_entries = document_entries[start_index:end_index]
+        merged_chunk = "\n".join(
+            entry["chunk"].strip()
+            for entry in window_entries
+            if entry.get("chunk")
+        ).strip()
+        merged_chunk = _trim_to_question_anchor(merged_chunk, question)
+        merged_chunk = _normalize_text(merged_chunk)
+
+        return f"[{matched_entry['knowledgeBaseId']}] {matched_entry['title']}: {merged_chunk}"
 
     def search(
         self,
@@ -189,32 +347,57 @@ class FaissStore:
         if not candidate_entries:
             return []
 
+        grouped_entries = self._group_entries_by_document(candidate_entries)
+
         # 【评分】计算每个片段与问题的相似度
         scored_entries = []
         for entry in candidate_entries:
             chunk_tokens = _tokenize(entry["chunk"])
             # 相似度 = 共同词的数量
             score = len(question_tokens & chunk_tokens)
-            scored_entries.append((score, entry))
+            title_tokens = _tokenize(entry.get("title", ""))
+            title_bonus = len(question_tokens & title_tokens)
+            phrase_bonus = 1 if question.strip() and question.strip() in entry["chunk"] else 0
+            quality_bonus = _quality_score(entry["chunk"])
+            final_score = score * 2 + title_bonus + phrase_bonus + quality_bonus
+            scored_entries.append((final_score, quality_bonus, entry))
 
         # 【排序】按分数降序，分数相同则按片段长度升序（短片段通常更精准）
         scored_entries.sort(
             key=lambda item: (
-                item[0],           # 分数（越高越好）
-                len(item[1]["chunk"]),  # 长度（越短越好）
+                item[0],                 # 综合分数（越高越好）
+                item[1],                 # 正文质量（越高越好）
+                -len(item[2]["chunk"]),  # 略偏向更完整的正文片段
             ),
             reverse=True,
         )
 
         # 【取 Top-K】优先返回有匹配的，否则返回前 K 个
-        top_entries = [entry for score, entry in scored_entries if score > 0][:limit]
+        top_entries = [entry for score, _, entry in scored_entries if score > 0][:limit]
 
         if not top_entries:
-            top_entries = [entry for _, entry in scored_entries[:limit]]
+            top_entries = [entry for _, _, entry in scored_entries[:limit]]
 
-        # 【格式化返回】
-        # 格式：[知识库ID] 标题: 片段内容
-        return [
-            f"[{entry['knowledgeBaseId']}] {entry['title']}: {entry['chunk']}"
-            for entry in top_entries
-        ]
+        merged_contexts: List[str] = []
+        seen_documents: Set[str] = set()
+        seen_contexts: Set[str] = set()
+
+        for entry in top_entries:
+            document_key = (
+                entry.get("documentId")
+                or f"{entry['knowledgeBaseId']}::{entry['title']}"
+            )
+            if document_key in seen_documents:
+                continue
+
+            document_entries = grouped_entries.get(document_key, [entry])
+            merged_context = self._expand_context(entry, document_entries, question)
+            normalized_context = _normalize_text(merged_context)
+            if normalized_context in seen_contexts:
+                continue
+
+            merged_contexts.append(merged_context)
+            seen_documents.add(document_key)
+            seen_contexts.add(normalized_context)
+
+        return merged_contexts[:limit]

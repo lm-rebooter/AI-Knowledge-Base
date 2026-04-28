@@ -23,6 +23,13 @@ type ChatSession = {
   updatedAt: string;
 };
 
+type ChatSessionSnapshot = {
+  id: string;
+  title: string;
+  knowledgeBaseId: string;
+  updatedAt: string;
+};
+
 type ChatResponse = {
   question: string;
   answer: string;
@@ -53,6 +60,24 @@ function createSession(knowledgeBaseId: string, index: number): ChatSession {
   };
 }
 
+function buildSessionSnapshot(session: ChatSession): ChatSessionSnapshot {
+  return {
+    id: session.id,
+    title: session.title,
+    knowledgeBaseId: session.knowledgeBaseId,
+    updatedAt: session.updatedAt
+  };
+}
+
+async function syncSessionsToApi(sessions: ChatSession[]) {
+  await apiRequest<ApiEnvelope<{ count: number }>>("/chat/sessions/sync", {
+    method: "POST",
+    body: JSON.stringify({
+      sessions: sessions.map(buildSessionSnapshot)
+    })
+  });
+}
+
 function formatSessionTime(value: string) {
   return new Date(value).toLocaleString("zh-CN", {
     month: "numeric",
@@ -77,6 +102,10 @@ function getSessionPreview(messages: ChatMessage[]) {
   return lastUserMessage?.content ?? "还没有提问";
 }
 
+function getNextSessionIndex(sessions: ChatSession[], knowledgeBaseId: string) {
+  return sessions.filter((session) => session.knowledgeBaseId === knowledgeBaseId).length + 1;
+}
+
 export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   const defaultKnowledgeBaseId = knowledgeBases[0]?.id ?? "";
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -98,25 +127,21 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
 
       if (rawValue) {
         const parsedSessions = JSON.parse(rawValue) as ChatSession[];
+        setSessions(parsedSessions);
+        const initialSession =
+          parsedSessions.find((session) => session.knowledgeBaseId === defaultKnowledgeBaseId) ??
+          parsedSessions[0];
 
-        if (parsedSessions.length > 0) {
-          setSessions(parsedSessions);
-          const initialSession =
-            parsedSessions.find((session) => session.knowledgeBaseId === defaultKnowledgeBaseId) ??
-            parsedSessions[0];
-
-          setActiveSessionId(initialSession?.id ?? "");
-          setHasLoadedLocalState(true);
-          return;
-        }
+        setActiveSessionId(initialSession?.id ?? "");
+        setHasLoadedLocalState(true);
+        return;
       }
     } catch {
       // Ignore bad local cache and rebuild a clean local workspace.
     }
 
-    const initialSession = createSession(defaultKnowledgeBaseId, 1);
-    setSessions([initialSession]);
-    setActiveSessionId(initialSession.id);
+    setSessions([]);
+    setActiveSessionId("");
     setHasLoadedLocalState(true);
   }, [defaultKnowledgeBaseId]);
 
@@ -126,6 +151,9 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    void syncSessionsToApi(sessions).catch(() => {
+      // Keep local chat usable even if session summary sync fails.
+    });
   }, [hasLoadedLocalState, sessions]);
 
   useEffect(() => {
@@ -184,7 +212,11 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   }
 
   function handleCreateSession() {
-    const newSession = createSession(selectedKnowledgeBaseId || defaultKnowledgeBaseId, sessions.length + 1);
+    const knowledgeBaseId = selectedKnowledgeBaseId || defaultKnowledgeBaseId;
+    const newSession = createSession(
+      knowledgeBaseId,
+      getNextSessionIndex(sessions, knowledgeBaseId)
+    );
     setSessions((currentSessions) => [newSession, ...currentSessions]);
     setActiveSessionId(newSession.id);
     setQuestion("");
@@ -253,7 +285,10 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
       ...session,
       title:
         session.messages.length <= 1
-          ? buildSessionTitle(trimmedQuestion, sessions.length)
+          ? buildSessionTitle(
+              trimmedQuestion,
+              getNextSessionIndex(sessions, session.knowledgeBaseId)
+            )
           : session.title,
       messages: [...session.messages, userMessage],
       updatedAt: askedAt

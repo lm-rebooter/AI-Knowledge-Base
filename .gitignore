@@ -5,3 +5,7 @@ dist
 .DS_Store
 .env
 *.log
+*.pyc
+__pycache__/
+.pycache/
+*.tsbuildinfo

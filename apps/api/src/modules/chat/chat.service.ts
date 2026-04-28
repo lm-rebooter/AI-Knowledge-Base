@@ -12,9 +12,10 @@
  * 这样前端可以正常展示，不至于崩溃
  */
 import { Injectable, Logger } from "@nestjs/common";
-import { ChatRequestDto } from "@ai-kb/shared";
+import { ChatRequestDto, ChatSessionSyncDto } from "@ai-kb/shared";
 import { AiService } from "../ai/ai.service";
 import { listChatHistory, saveChatHistory } from "./chat-history.store";
+import { listChatSessions, saveChatSessions } from "./chat-session.store";
 
 @Injectable()
 export class ChatService {
@@ -89,6 +90,11 @@ export class ChatService {
     }
   }
 
+  async syncSessions(body: ChatSessionSyncDto) {
+    await saveChatSessions(body.sessions);
+    return { count: body.sessions.length };
+  }
+
   /**
    * 获取问答统计摘要
    *
@@ -99,20 +105,13 @@ export class ChatService {
    * - 最近一次问答时间
    */
   async getSummary() {
-    const history = await listChatHistory();
-
-    // 统计独立的会话数（去重 conversationId）
-    const conversationIds = new Set(
-      history
-        .map((entry) => entry.conversationId)
-        .filter((conversationId): conversationId is string => Boolean(conversationId))
-    );
+    const [history, sessions] = await Promise.all([listChatHistory(), listChatSessions()]);
 
     // 统计使用了兜底的次数
     const fallbackCount = history.filter((entry) => entry.fallbackUsed).length;
 
     return {
-      conversationCount: conversationIds.size,
+      conversationCount: sessions.length,
       questionCount: history.length,
       fallbackCount,
       // 最近一次问答的时间

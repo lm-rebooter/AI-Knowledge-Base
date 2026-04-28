@@ -50,7 +50,11 @@ splitter = RecursiveCharacterTextSplitter(
 """
 
 
-def split_document(content: str, chunk_size: int = 200) -> list[str]:
+def split_document(
+    content: str,
+    chunk_size: int = 360,
+    chunk_overlap: int = 80,
+) -> list[str]:
     """
     将文档内容切分为小块
 
@@ -75,11 +79,21 @@ def split_document(content: str, chunk_size: int = 200) -> list[str]:
     - 合并过小的片段
     - 添加元数据（来源页码、标题等）
     """
-    # 简单的固定长度切片
-    # range(start, stop, step)
-    # i 从 0 开始，每次步长 chunk_size，直到超过内容长度
-    return [
-        content[i : i + chunk_size]
-        for i in range(0, len(content), chunk_size)
-        if content[i : i + chunk_size]  # 过滤空字符串
-    ]
+    normalized_content = content.strip()
+    if not normalized_content:
+        return []
+
+    # 使用带重叠的滑动窗口，避免答案恰好被切断后只命中前半段。
+    step = max(chunk_size - chunk_overlap, 1)
+    chunks = []
+
+    for start in range(0, len(normalized_content), step):
+        chunk = normalized_content[start : start + chunk_size].strip()
+        if not chunk:
+            continue
+        chunks.append(chunk)
+
+        if start + chunk_size >= len(normalized_content):
+            break
+
+    return chunks
