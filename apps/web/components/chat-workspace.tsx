@@ -80,6 +80,7 @@ function getSessionPreview(messages: ChatMessage[]) {
 export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   const defaultKnowledgeBaseId = knowledgeBases[0]?.id ?? "";
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState(defaultKnowledgeBaseId);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +101,11 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
 
         if (parsedSessions.length > 0) {
           setSessions(parsedSessions);
-          setActiveSessionId(parsedSessions[0].id);
+          const initialSession =
+            parsedSessions.find((session) => session.knowledgeBaseId === defaultKnowledgeBaseId) ??
+            parsedSessions[0];
+
+          setActiveSessionId(initialSession?.id ?? "");
           setHasLoadedLocalState(true);
           return;
         }
@@ -124,6 +129,10 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   }, [hasLoadedLocalState, sessions]);
 
   useEffect(() => {
+    setSelectedKnowledgeBaseId(defaultKnowledgeBaseId);
+  }, [defaultKnowledgeBaseId]);
+
+  useEffect(() => {
     function handleWindowClick() {
       setMenuSessionId(null);
     }
@@ -134,18 +143,37 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
     };
   }, []);
 
+  const visibleSessions = useMemo(
+    () =>
+      sessions.filter((session) =>
+        selectedKnowledgeBaseId ? session.knowledgeBaseId === selectedKnowledgeBaseId : true
+      ),
+    [selectedKnowledgeBaseId, sessions]
+  );
+
   const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null,
-    [activeSessionId, sessions]
+    () => visibleSessions.find((session) => session.id === activeSessionId) ?? visibleSessions[0] ?? null,
+    [activeSessionId, visibleSessions]
   );
 
   const activeKnowledgeBase = useMemo(
     () =>
-      knowledgeBases.find((knowledgeBase) => knowledgeBase.id === activeSession?.knowledgeBaseId) ??
+      knowledgeBases.find((knowledgeBase) => knowledgeBase.id === selectedKnowledgeBaseId) ??
       knowledgeBases[0] ??
       null,
-    [activeSession?.knowledgeBaseId, knowledgeBases]
+    [selectedKnowledgeBaseId, knowledgeBases]
   );
+
+  useEffect(() => {
+    if (visibleSessions.length === 0) {
+      setActiveSessionId("");
+      return;
+    }
+
+    if (!visibleSessions.some((session) => session.id === activeSessionId)) {
+      setActiveSessionId(visibleSessions[0].id);
+    }
+  }, [activeSessionId, visibleSessions]);
 
   function updateActiveSession(updater: (session: ChatSession) => ChatSession) {
     setSessions((currentSessions) =>
@@ -156,7 +184,7 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   }
 
   function handleCreateSession() {
-    const newSession = createSession(defaultKnowledgeBaseId, sessions.length + 1);
+    const newSession = createSession(selectedKnowledgeBaseId || defaultKnowledgeBaseId, sessions.length + 1);
     setSessions((currentSessions) => [newSession, ...currentSessions]);
     setActiveSessionId(newSession.id);
     setQuestion("");
@@ -165,15 +193,10 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   }
 
   function handleKnowledgeBaseChange(nextKnowledgeBaseId: string) {
-    if (!activeSession) {
-      return;
-    }
-
-    updateActiveSession((session) => ({
-      ...session,
-      knowledgeBaseId: nextKnowledgeBaseId,
-      updatedAt: new Date().toISOString()
-    }));
+    setSelectedKnowledgeBaseId(nextKnowledgeBaseId);
+    setQuestion("");
+    setError(null);
+    setMenuSessionId(null);
   }
 
   function handleDeleteSession(sessionId: string) {
@@ -191,8 +214,12 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
     setSessions(remainingSessions);
     setMenuSessionId(null);
 
+    const remainingVisibleSessions = remainingSessions.filter((session) =>
+      selectedKnowledgeBaseId ? session.knowledgeBaseId === selectedKnowledgeBaseId : true
+    );
+
     if (activeSessionId === sessionId) {
-      setActiveSessionId(remainingSessions[0].id);
+      setActiveSessionId(remainingVisibleSessions[0]?.id ?? "");
       setQuestion("");
       setError(null);
     }
@@ -289,7 +316,7 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
           <select
             className="w-full rounded-[18px] border border-[var(--border)] bg-white/90 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--brand)]"
             onChange={(event) => handleKnowledgeBaseChange(event.target.value)}
-            value={activeSession?.knowledgeBaseId ?? defaultKnowledgeBaseId}
+            value={selectedKnowledgeBaseId}
           >
             {knowledgeBases.map((knowledgeBase) => (
               <option key={knowledgeBase.id} value={knowledgeBase.id}>
@@ -300,7 +327,7 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
         </div>
 
         <div className="max-h-[620px] space-y-2 overflow-y-auto px-3 py-3">
-          {sessions.map((session) => {
+          {visibleSessions.map((session) => {
             const isActive = session.id === activeSession?.id;
             const matchedKnowledgeBase = knowledgeBases.find(
               (knowledgeBase) => knowledgeBase.id === session.knowledgeBaseId
@@ -390,6 +417,11 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
               </article>
             );
           })}
+          {visibleSessions.length === 0 ? (
+            <div className="rounded-[18px] border border-dashed border-[var(--border)] bg-white/50 px-4 py-6 text-sm text-[var(--muted)]">
+              当前知识库下还没有聊天记录，点击上方“新建”开始第一条会话。
+            </div>
+          ) : null}
         </div>
       </aside>
 

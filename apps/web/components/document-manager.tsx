@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, buildApiAssetUrl } from "@/lib/api";
 import type { ApiEnvelope, UpdateDocumentDto } from "@ai-kb/shared";
 
 type DocumentItem = {
@@ -185,7 +185,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                           <span>原始 PDF 预览</span>
                           <a
                             className="font-medium text-[var(--brand)]"
-                            href={document.fileUrl}
+                            href={buildApiAssetUrl(document.fileUrl)}
                             rel="noreferrer"
                             target="_blank"
                           >
@@ -194,14 +194,19 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                         </div>
                         <iframe
                           className="h-[320px] w-full bg-white"
-                          src={document.fileUrl}
+                          src={buildApiAssetUrl(document.fileUrl)}
                           title={document.originalFileName ?? document.title}
                         />
                       </div>
                     ) : null}
                     {document.fileUrl && document.fileType && document.fileType !== "application/pdf" ? (
                       <p className="mt-4 text-sm">
-                        <a className="font-medium text-[var(--brand)]" href={document.fileUrl} rel="noreferrer" target="_blank">
+                        <a
+                          className="font-medium text-[var(--brand)]"
+                          href={buildApiAssetUrl(document.fileUrl)}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
                           查看原文件：{document.originalFileName ?? document.title}
                         </a>
                       </p>

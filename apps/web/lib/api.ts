@@ -37,6 +37,7 @@
 // 【配置】API 基础地址
 // NEXT_PUBLIC_ 前缀表示这是客户端可访问的公开变量
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const API_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
 /**
  * API 请求错误类
@@ -100,4 +101,19 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   // 【响应解析】
   // 统一返回解析后的 JSON 数据
   return (await response.json()) as T;
+}
+
+/**
+ * 构造静态资源或文件流的完整后端地址
+ *
+ * 知识库文档里的 `fileUrl` 目前是 `/api/documents/:id/file` 这种相对路径。
+ * 在 Next.js 页面里直接用会命中前端 3000 端口，而不是 NestJS 3001。
+ * 这里统一把它补成真正的后端完整地址。
+ */
+export function buildApiAssetUrl(path: string) {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+
+  return `${API_ORIGIN}${path.startsWith("/") ? path : `/${path}`}`;
 }
