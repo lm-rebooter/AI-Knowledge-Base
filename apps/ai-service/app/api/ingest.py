@@ -21,7 +21,7 @@
 """
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 
 from app.rag.chain import summarize_ingest_result
 from app.rag.loader import load_document
@@ -39,6 +39,7 @@ class IngestRequest(BaseModel):
     knowledge_base_id: str = Field(alias="knowledgeBaseId", description="所属知识库 ID")
     title: str = Field(description="文档标题")
     content: str = Field(description="文档原始文本内容")
+    page_texts: Optional[List[str]] = Field(default=None, alias="pageTexts", description="按页提取的文本")
 
 
 @router.post("/ingest")
@@ -69,7 +70,7 @@ def ingest_document(payload: IngestRequest) -> dict:
 
     # 【Step 2】文档切片
     # 按固定长度（默认 200 字符）切分，便于后续精准检索
-    chunks = split_document(document["content"])
+    chunks = split_document(document["content"], page_texts=payload.page_texts)
 
     # 【Step 3】向量化
     # 将每块文本转为向量表示

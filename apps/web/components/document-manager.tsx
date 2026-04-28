@@ -9,11 +9,13 @@ type DocumentItem = {
   id: string;
   title: string;
   content: string;
+  contentPreviewLabel?: string | null;
   status: string;
   createdAt: string;
   fileUrl?: string | null;
   fileType?: string | null;
   originalFileName?: string | null;
+  previewPages?: string[] | null;
 };
 
 type DocumentManagerProps = {
@@ -176,9 +178,44 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                         {document.status}
                       </span>
                     </div>
-                    <div className="mt-3 max-h-64 overflow-y-auto rounded-[16px] bg-[var(--ink-soft)] px-4 py-3">
-                      <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{document.content}</p>
+                    <div className="mt-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                        {document.contentPreviewLabel ?? "文档内容"}
+                      </p>
+                      <div className="max-h-64 overflow-y-auto rounded-[16px] bg-[var(--ink-soft)] px-4 py-3">
+                        <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{document.content}</p>
+                      </div>
                     </div>
+                    {document.previewPages?.length ? (
+                      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-white p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">PDF 提取文本预览（按页对应）</p>
+                            <p className="mt-1 text-xs text-[var(--muted)]">
+                              这里的页码和下方 PDF 预览页码一一对应，方便排查抽取和检索是否准确。
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-[var(--ink-soft)] px-3 py-1 text-xs text-[var(--muted)]">
+                            共 {document.previewPages.length} 页
+                          </span>
+                        </div>
+                        <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                          {document.previewPages.map((pageText, index) => (
+                            <details
+                              key={`${document.id}-page-${index + 1}`}
+                              className="rounded-xl border border-[var(--border)] bg-[var(--ink-soft)] px-4 py-3"
+                            >
+                              <summary className="cursor-pointer list-none text-sm font-medium">
+                                第 {index + 1} 页
+                              </summary>
+                              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                                {pageText}
+                              </p>
+                            </details>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {document.fileUrl && document.fileType === "application/pdf" ? (
                       <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
                         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 text-sm">

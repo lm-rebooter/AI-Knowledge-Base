@@ -16,8 +16,13 @@ type KnowledgeBaseDetail = {
     id: string;
     title: string;
     content: string;
+    contentPreviewLabel?: string | null;
     status: string;
     createdAt: string;
+    fileUrl?: string | null;
+    fileType?: string | null;
+    originalFileName?: string | null;
+    previewPages?: string[] | null;
   }>;
 };
 

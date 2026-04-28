@@ -27,4 +27,5 @@ export class UpdateDocumentDto {
 
 export type IngestDocumentRequest = CreateDocumentDto & {
   documentId?: string;
+  pageTexts?: string[];
 };

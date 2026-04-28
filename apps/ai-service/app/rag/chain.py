@@ -22,11 +22,12 @@ RAG 问答链 - 负责构建提示词和调用 LLM
 接入 OpenAI 后，只需要修改 generate_answer 函数即可。
 """
 from app.core.llm import generate_answer
+from typing import Dict, List
 
 
 def summarize_ingest_result(
-    title: str, knowledge_base_id: str, chunks: list[str], vectors: list[list[float]]
-) -> dict:
+    title: str, knowledge_base_id: str, chunks: List[str], vectors: List[List[float]]
+) -> Dict:
     """
     返回文档入库的摘要信息
 
@@ -46,7 +47,7 @@ def summarize_ingest_result(
     }
 
 
-def build_answer(question: str, contexts: list[str]) -> dict:
+def build_answer(question: str, contexts: List[str]) -> Dict:
     """
     构建 RAG 问答结果
 

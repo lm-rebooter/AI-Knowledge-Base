@@ -71,6 +71,23 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _dedupe_lines(lines: List[str]) -> List[str]:
+    """去掉连续重复的文本行，缓解 PDF 解析后的重叠切片噪音。"""
+    deduped: List[str] = []
+    previous_normalized = ""
+
+    for line in lines:
+        normalized = _normalize_text(line)
+        if not normalized:
+            continue
+        if normalized == previous_normalized:
+            continue
+        deduped.append(line.strip())
+        previous_normalized = normalized
+
+    return deduped
+
+
 def _tokenize(text: str) -> Set[str]:
     """
     轻量级分词器
@@ -118,12 +135,31 @@ def _is_toc_like(chunk: str) -> bool:
     return has_catalog or question_count >= 3 or dotted_leader_count >= 2 or has_many_page_numbers
 
 
+def _is_question_list_like(chunk: str) -> bool:
+    """
+    判断片段是否更像题目清单，而不是答案正文。
+    """
+    normalized = chunk.replace(" ", "")
+    numbered_items = len(re.findall(r"\n?\d+[、.．]", normalized))
+    short_question_lines = len(
+        [
+            line
+            for line in chunk.splitlines()
+            if 4 <= len(line.strip()) <= 40
+            and any(marker in line for marker in ["什么", "区别", "如何", "为什么", "吗？", "吗?"])
+        ]
+    )
+    return numbered_items >= 4 or short_question_lines >= 4
+
+
 def _quality_score(chunk: str) -> int:
     """
     片段质量分，正文高，目录/导航低。
     """
     score = 0
     if _is_toc_like(chunk):
+        score -= 18
+    if _is_question_list_like(chunk):
         score -= 12
 
     if "function" in chunk.lower() or "=>" in chunk or "return" in chunk:
@@ -132,7 +168,175 @@ def _quality_score(chunk: str) -> int:
     if any(keyword in chunk for keyword in ["区别", "实现", "步骤", "原理", "作用"]):
         score += 2
 
+    if any(keyword in chunk for keyword in ["原因", "方法", "优化", "避免", "减少", "例如", "比如"]):
+        score += 3
+
+    if len(chunk.strip()) >= 160:
+        score += 1
+
     return score
+
+
+def _is_question_heading(line: str) -> bool:
+    normalized = line.strip()
+    if not normalized:
+        return False
+    if re.match(r"^[、•·]\s*", normalized):
+        return True
+    return bool(
+        re.match(r"^(?:第?\d+[、.．题:]|[一二三四五六七八九十]+[、.．])", normalized)
+    )
+
+
+def _line_score(line: str, question_tokens: Set[str]) -> int:
+    normalized = line.strip().lower()
+    if not normalized:
+        return -999
+
+    score = 0
+    for token in question_tokens:
+        if token in normalized:
+            score += max(len(token), 1) * 2
+
+    if any(keyword in normalized for keyword in ["重排", "回流", "重绘", "原因", "方法", "避免", "减少"]):
+        score += 3
+
+    if any(keyword in normalized for keyword in ["浏览器", "dom", "class", "fragment", "absolute", "transform"]):
+        score += 2
+
+    if len(normalized) <= 36 and any(marker in normalized for marker in ["什么", "如何", "吗", "区别", "作用"]):
+        score -= 4
+
+    if _is_question_heading(normalized):
+        score -= 5
+
+    if _is_toc_like(normalized) or _is_question_list_like(normalized):
+        score -= 6
+
+    if len(normalized) < 10:
+        score -= 2
+
+    return score
+
+
+def _extract_focus_excerpt(text: str, question: str, max_chars: int = 700) -> str:
+    """
+    从拼接后的上下文里截取最相关的答案段，尽量避开题纲和下一题内容。
+    """
+    lines = _dedupe_lines([line for line in text.splitlines() if line.strip()])
+    if not lines:
+        return text.strip()
+
+    question_tokens = {
+        token
+        for token in _tokenize(question)
+        if len(token) >= 2 and not token.isdigit()
+    }
+
+    def block_score(block_lines: List[str]) -> int:
+        return sum(
+            max(_line_score(line, question_tokens), 0)
+            for line in block_lines
+            if not _is_question_heading(line)
+        )
+
+    heading_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if _is_question_heading(line)
+        and any(token in line.lower() for token in question_tokens)
+    ]
+
+    best_heading_excerpt = ""
+    best_heading_score = -1
+    for heading_index in heading_indexes:
+        before_start = heading_index - 1
+        while before_start > 0 and not _is_question_heading(lines[before_start - 1]):
+            before_start -= 1
+        before_block = lines[max(before_start, heading_index - 12) : heading_index]
+
+        after_end = heading_index + 1
+        while after_end < len(lines) and not _is_question_heading(lines[after_end]):
+            after_end += 1
+        after_block = lines[heading_index + 1 : min(after_end, heading_index + 9)]
+
+        candidates = [block for block in (before_block, after_block) if block]
+        for block in candidates:
+            current_score = block_score(block)
+            if current_score > best_heading_score:
+                best_heading_score = current_score
+                block_lines = _dedupe_lines(block)
+                while block_lines and _is_question_heading(block_lines[-1]):
+                    block_lines.pop()
+                best_heading_excerpt = "\n".join(block_lines).strip()
+
+    if best_heading_excerpt and best_heading_score > 0:
+        return best_heading_excerpt[:max_chars].strip()
+
+    scored_lines = [
+        (_line_score(line, question_tokens), index, line)
+        for index, line in enumerate(lines)
+    ]
+    scored_lines.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+
+    best_score, best_index, _ = scored_lines[0]
+    if best_score <= 0:
+        excerpt = "\n".join(lines[:8]).strip()
+        return excerpt[:max_chars].strip()
+
+    start_index = best_index
+    while start_index > 0:
+        candidate = lines[start_index - 1]
+        candidate_score = _line_score(candidate, question_tokens)
+        if _is_question_heading(candidate) or candidate_score <= 0:
+            break
+        start_index -= 1
+
+    selected_lines: List[str] = []
+    for index in range(start_index, len(lines)):
+        line = lines[index]
+
+        if _is_question_heading(line):
+            if index <= best_index:
+                continue
+            break
+
+        if (
+            index > best_index
+            and _is_question_heading(line)
+            and not any(token in line.lower() for token in question_tokens)
+        ):
+            break
+
+        selected_lines.append(line)
+        if len("\n".join(selected_lines)) >= max_chars:
+            break
+
+    excerpt = "\n".join(_dedupe_lines(selected_lines)).strip()
+    return excerpt[:max_chars].strip()
+
+
+def _excerpt_value_score(excerpt: str, question: str) -> int:
+    lines = [line.strip() for line in excerpt.splitlines() if line.strip()]
+    if not lines:
+        return -1
+
+    question_tokens = {
+        token
+        for token in _tokenize(question)
+        if len(token) >= 2 and not token.isdigit()
+    }
+    answer_like_lines = 0
+    heading_like_lines = 0
+
+    for line in lines:
+        if _is_question_heading(line):
+            heading_like_lines += 1
+            continue
+        if _line_score(line, question_tokens) > 0:
+            answer_like_lines += 1
+
+    return answer_like_lines - heading_like_lines
 
 
 def _trim_to_question_anchor(text: str, question: str) -> str:
@@ -179,7 +383,17 @@ def _trim_to_question_anchor(text: str, question: str) -> str:
     elif line_start != 0:
         line_start += 1
 
-    return normalized_text[line_start:].strip()
+    anchored_text = normalized_text[line_start:].strip()
+    return _extract_focus_excerpt(anchored_text, question)
+
+
+def _has_topic_boundary(chunk: str) -> bool:
+    """
+    判断片段是否进入了下一题或下一段问题清单。
+    """
+    return bool(
+        re.search(r"(?:^|\n)(?:第\d+题[:：]?|\d+[、.．])", chunk)
+    )
 
 
 class FaissStore:
@@ -217,20 +431,18 @@ class FaissStore:
         entries = _load_entries()
 
         # 【去重】删除旧版本
+        # 优先保留同一知识库下当前标题的最新版本，避免重复入库后旧切片继续参与检索。
+        filtered_entries = [
+            entry
+            for entry in entries
+            if not (
+                entry["knowledgeBaseId"] == knowledge_base_id
+                and entry["title"] == title
+            )
+        ]
         if document_id:
-            # 按 document_id 精确匹配
             filtered_entries = [
-                entry for entry in entries if entry.get("documentId") != document_id
-            ]
-        else:
-            # 按知识库+标题组合匹配
-            filtered_entries = [
-                entry
-                for entry in entries
-                if not (
-                    entry["knowledgeBaseId"] == knowledge_base_id
-                    and entry["title"] == title
-                )
+                entry for entry in filtered_entries if entry.get("documentId") != document_id
             ]
 
         # 【批量插入】将新片段和向量添加到列表
@@ -299,15 +511,33 @@ class FaissStore:
                 break
 
         start_index = max(matched_index - 1, 0)
-        end_index = min(matched_index + 3, len(document_entries))
-        window_entries = document_entries[start_index:end_index]
+        window_entries = []
+
+        for index in range(start_index, len(document_entries)):
+            entry = document_entries[index]
+            chunk = (entry.get("chunk") or "").strip()
+            if not chunk:
+                continue
+
+            if (
+                index > matched_index
+                and _has_topic_boundary(chunk)
+                and not any(token in chunk for token in _tokenize(question))
+            ):
+                break
+
+            window_entries.append(entry)
+            merged_text = "\n".join(item["chunk"].strip() for item in window_entries if item.get("chunk"))
+            if len(merged_text) >= 900:
+                break
+
         merged_chunk = "\n".join(
             entry["chunk"].strip()
             for entry in window_entries
             if entry.get("chunk")
         ).strip()
         merged_chunk = _trim_to_question_anchor(merged_chunk, question)
-        merged_chunk = _normalize_text(merged_chunk)
+        merged_chunk = re.sub(r"\n{3,}", "\n\n", merged_chunk).strip()
 
         return f"[{matched_entry['knowledgeBaseId']}] {matched_entry['title']}: {merged_chunk}"
 
@@ -373,13 +603,39 @@ class FaissStore:
         )
 
         # 【取 Top-K】优先返回有匹配的，否则返回前 K 个
-        top_entries = [entry for score, _, entry in scored_entries if score > 0][:limit]
+        preferred_entries = [
+            item for item in scored_entries if item[1] > -8 and item[0] > 0
+        ]
+        candidate_ranked_entries = preferred_entries or [
+            item for item in scored_entries if item[0] > 0
+        ]
+
+        top_entries: List[Dict] = []
+        selected_regions: Set[str] = set()
+
+        for score, _, entry in candidate_ranked_entries:
+            document_key = (
+                entry.get("documentId")
+                or f"{entry['knowledgeBaseId']}::{entry['title']}"
+            )
+            chunk_index = entry.get("chunkIndex", -1)
+            region_key = (
+                f"{document_key}::idx:{chunk_index // 2}"
+                if isinstance(chunk_index, int) and chunk_index >= 0
+                else f"{document_key}::fallback:{_normalize_text(entry['chunk'])[:120]}"
+            )
+            if region_key in selected_regions:
+                continue
+
+            top_entries.append(entry)
+            selected_regions.add(region_key)
+            if len(top_entries) >= limit:
+                break
 
         if not top_entries:
             top_entries = [entry for _, _, entry in scored_entries[:limit]]
 
         merged_contexts: List[str] = []
-        seen_documents: Set[str] = set()
         seen_contexts: Set[str] = set()
 
         for entry in top_entries:
@@ -387,17 +643,16 @@ class FaissStore:
                 entry.get("documentId")
                 or f"{entry['knowledgeBaseId']}::{entry['title']}"
             )
-            if document_key in seen_documents:
-                continue
-
             document_entries = grouped_entries.get(document_key, [entry])
             merged_context = self._expand_context(entry, document_entries, question)
+            _, _, excerpt = merged_context.partition(":")
+            if _excerpt_value_score(excerpt, question) <= 0 and merged_contexts:
+                continue
             normalized_context = _normalize_text(merged_context)
             if normalized_context in seen_contexts:
                 continue
 
             merged_contexts.append(merged_context)
-            seen_documents.add(document_key)
             seen_contexts.add(normalized_context)
 
         return merged_contexts[:limit]

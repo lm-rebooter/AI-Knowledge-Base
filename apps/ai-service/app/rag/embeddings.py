@@ -56,9 +56,10 @@ model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 vectors = model.encode(texts)  # 批量编码
 ```
 """
+from typing import List
 
 
-def embed_chunks(chunks: list[str]) -> list[list[float]]:
+def embed_chunks(chunks: List[str]) -> List[List[float]]:
     """
     将文本块列表转换为向量列表
 

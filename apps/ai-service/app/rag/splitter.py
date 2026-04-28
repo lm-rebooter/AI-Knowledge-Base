@@ -48,13 +48,35 @@ splitter = RecursiveCharacterTextSplitter(
 )
 ```
 """
+from typing import List, Optional
+
+
+def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+    normalized_text = text.strip()
+    if not normalized_text:
+        return []
+
+    step = max(chunk_size - chunk_overlap, 1)
+    chunks = []
+
+    for start in range(0, len(normalized_text), step):
+        chunk = normalized_text[start : start + chunk_size].strip()
+        if not chunk:
+            continue
+        chunks.append(chunk)
+
+        if start + chunk_size >= len(normalized_text):
+            break
+
+    return chunks
 
 
 def split_document(
     content: str,
     chunk_size: int = 360,
     chunk_overlap: int = 80,
-) -> list[str]:
+    page_texts: Optional[List[str]] = None,
+) -> List[str]:
     """
     将文档内容切分为小块
 
@@ -79,21 +101,18 @@ def split_document(
     - 合并过小的片段
     - 添加元数据（来源页码、标题等）
     """
-    normalized_content = content.strip()
-    if not normalized_content:
-        return []
+    if page_texts:
+        page_chunks: List[str] = []
 
-    # 使用带重叠的滑动窗口，避免答案恰好被切断后只命中前半段。
-    step = max(chunk_size - chunk_overlap, 1)
-    chunks = []
+        for page_index, page_text in enumerate(page_texts, start=1):
+            normalized_page_text = page_text.strip()
+            if not normalized_page_text:
+                continue
 
-    for start in range(0, len(normalized_content), step):
-        chunk = normalized_content[start : start + chunk_size].strip()
-        if not chunk:
-            continue
-        chunks.append(chunk)
+            for chunk in _chunk_text(normalized_page_text, chunk_size, chunk_overlap):
+                page_chunks.append(f"第{page_index}页\n{chunk}")
 
-        if start + chunk_size >= len(normalized_content):
-            break
+        if page_chunks:
+            return page_chunks
 
-    return chunks
+    return _chunk_text(content, chunk_size, chunk_overlap)

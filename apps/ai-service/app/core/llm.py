@@ -58,8 +58,8 @@ def _strip_context_prefix(context: str) -> Tuple[str, str]:
     """
     将 `[kb] 标题: 正文` 这样的上下文拆成标题和正文。
     """
-    normalized = re.sub(r"\s+", " ", context).strip()
-    matched = re.match(r"^\[[^\]]+\]\s*([^:：]+)[:：]\s*(.*)$", normalized)
+    normalized = context.strip()
+    matched = re.match(r"^\[[^\]]+\]\s*([^:：\n]+)[:：]\s*(.*)$", normalized, re.S)
     if not matched:
         return ("知识片段", normalized)
     return (matched.group(1).strip(), matched.group(2).strip())
@@ -92,8 +92,19 @@ def _split_sentences(text: str) -> List[str]:
     """
     按中文问答常见的标点和换行切分句子。
     """
-    parts = re.split(r"(?<=[。！？；:：])\s+|\n+", text)
+    parts = re.split(r"(?<=[。！？；:：])\s+|\n+|(?=\d+[、.．])|(?=第\d+题)", text)
     return [part.strip(" \t-•·") for part in parts if part.strip()]
+
+
+def _is_prompt_sentence(sentence: str) -> bool:
+    normalized = sentence.strip()
+    if not normalized:
+        return True
+    if re.match(r"^(第\d+题|\d+[、.．])", normalized):
+        return True
+    if len(normalized) <= 24 and any(marker in normalized for marker in ["什么", "如何", "吗", "区别", "作用"]):
+        return True
+    return False
 
 
 def _sentence_score(sentence: str, question_tokens: List[str]) -> int:
@@ -106,6 +117,16 @@ def _sentence_score(sentence: str, question_tokens: List[str]) -> int:
     # 带有结论性质的语句略微加权，让回答更像总结而不是随机摘录。
     if any(keyword in sentence for keyword in ["区别", "实现", "定义", "作用", "步骤", "原因"]):
         score += 2
+
+    if any(keyword in sentence for keyword in ["方法", "优化", "避免", "减少", "例如", "浏览器"]):
+        score += 2
+
+    if _is_prompt_sentence(sentence):
+        score -= 6
+
+    if len(sentence.strip()) < 10:
+        score -= 2
+
     return score
 
 
@@ -116,6 +137,10 @@ def _collect_highlight_sentences(body: str, question_tokens: List[str], limit: i
 
     scored_sentences = []
     for index, sentence in enumerate(sentences):
+        if _is_prompt_sentence(sentence) and not any(
+            keyword in sentence for keyword in ["重绘", "重排", "回流", "减少", "避免", "优化"]
+        ):
+            continue
         score = _sentence_score(sentence, question_tokens)
         if score > 0:
             scored_sentences.append((score, index, sentence))
@@ -138,24 +163,19 @@ def _collect_highlight_sentences(body: str, question_tokens: List[str], limit: i
     return deduped
 
 
-def _build_reference_section(contexts: List[str], question_tokens: List[str]) -> str:
-    reference_blocks = []
-    for context in contexts[:2]:
-        title, body = _strip_context_prefix(context)
-        highlights = _collect_highlight_sentences(body, question_tokens, limit=3)
-        if not highlights:
+def _dedupe_sentences(sentences: List[str]) -> List[str]:
+    deduped: List[str] = []
+    seen = set()
+    for sentence in sentences:
+        normalized = re.sub(r"\s+", " ", sentence).strip()
+        if not normalized or normalized in seen:
             continue
-
-        formatted_lines = "\n".join(f"- {sentence}" for sentence in highlights)
-        reference_blocks.append(f"《{title}》\n{formatted_lines}")
-
-    if not reference_blocks:
-        return ""
-
-    return "\n\n依据片段：\n" + "\n\n".join(reference_blocks)
+        seen.add(normalized)
+        deduped.append(sentence.strip())
+    return deduped
 
 
-def generate_answer(question: str, contexts: list[str]) -> str:
+def generate_answer(question: str, contexts: List[str]) -> str:
     """
     基于上下文生成答案
 
@@ -191,19 +211,33 @@ def generate_answer(question: str, contexts: list[str]) -> str:
         )
 
     question_tokens = _tokenize_question(question)
-    primary_title, primary_body = _strip_context_prefix(contexts[0])
-    highlight_sentences = _collect_highlight_sentences(primary_body, question_tokens, limit=4)
+    collected_sentences: List[str] = []
+    source_titles: List[str] = []
 
-    if highlight_sentences:
-        summary = "\n".join(f"{index + 1}. {sentence}" for index, sentence in enumerate(highlight_sentences))
+    for context in contexts[:3]:
+      title, body = _strip_context_prefix(context)
+      if title not in source_titles:
+          source_titles.append(title)
+      collected_sentences.extend(
+          _collect_highlight_sentences(body, question_tokens, limit=3)
+      )
+
+    summary_sentences = _dedupe_sentences(collected_sentences)[:5]
+
+    if summary_sentences:
+        summary = "\n".join(
+            f"{index + 1}. {sentence}" for index, sentence in enumerate(summary_sentences)
+        )
     else:
+        primary_title, primary_body = _strip_context_prefix(contexts[0])
+        if primary_title not in source_titles:
+            source_titles.insert(0, primary_title)
         summary = primary_body[:320]
 
-    reference_section = _build_reference_section(contexts, question_tokens)
+    source_line = "、".join(source_titles[:3]) if source_titles else "当前命中文档"
 
     return (
         f"关于「{question}」，结合知识库里的命中内容，可以先这样理解：\n\n"
         f"{summary}"
-        f"\n\n来源文档：{primary_title}"
-        f"{reference_section}"
+        f"\n\n来源文档：{source_line}"
     )

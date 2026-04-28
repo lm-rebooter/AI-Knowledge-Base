@@ -1,7 +1,10 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { readFile } from "fs/promises";
 import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { getDocumentAsset } from "../documents/document-asset.store";
+import { getDocumentPreview, saveDocumentPreview } from "../documents/document-preview.store";
+import { extractPdfTextWithPages } from "../documents/pdf-extractor";
 
 @Injectable()
 export class KnowledgeBaseService {
@@ -82,16 +85,41 @@ export class KnowledgeBaseService {
     const documentsWithAssets = await Promise.all(
       knowledgeBase.documents.map(async (document) => {
         const asset = await getDocumentAsset(document.id);
+        let previewPages: string[] | null = null;
+
+        if (asset?.mimeType === "application/pdf") {
+          const savedPreview = await getDocumentPreview(document.id);
+
+          if (savedPreview?.pageTexts?.length) {
+            previewPages = savedPreview.pageTexts;
+          } else {
+            try {
+              const fileBuffer = await readFile(asset.absolutePath);
+              const extractedPreview = await extractPdfTextWithPages(fileBuffer);
+              previewPages = extractedPreview.pageTexts
+                .map((pageText) => pageText.replace(/\r\n/g, "\n").trim())
+                .filter((pageText) => pageText.length > 0);
+
+              if (previewPages.length) {
+                await saveDocumentPreview(document.id, previewPages);
+              }
+            } catch {
+              previewPages = null;
+            }
+          }
+        }
 
         return {
           id: document.id,
           title: document.title,
           content: document.content,
+          contentPreviewLabel: asset?.mimeType === "application/pdf" ? "提取文本预览（全文）" : "文档内容",
           status: document.status.toLowerCase(),
           createdAt: document.createdAt.toISOString(),
           fileUrl: asset ? `/api/documents/${document.id}/file` : null,
           fileType: asset?.mimeType ?? null,
-          originalFileName: asset?.originalFileName ?? null
+          originalFileName: asset?.originalFileName ?? null,
+          previewPages,
         };
       })
     );

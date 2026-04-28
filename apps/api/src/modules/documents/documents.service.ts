@@ -26,11 +26,14 @@ import {
 import { DocumentStatus } from "@prisma/client";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
 import { createReadStream } from "fs";
+import { readFile } from "fs/promises";
 import { Response } from "express";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
-import { ParsedPdfDocument, UploadedDocumentFile } from "./document-file.type";
+import { UploadedDocumentFile } from "./document-file.type";
 import { getDocumentAsset, saveDocumentAsset } from "./document-asset.store";
+import { getDocumentPreview, saveDocumentPreview } from "./document-preview.store";
+import { extractPdfTextWithPages } from "./pdf-extractor";
 
 @Injectable()
 export class DocumentsService {
@@ -92,11 +95,14 @@ export class DocumentsService {
       throw new BadRequestException("上传文件过大，请控制在 20MB 以内。");
     }
 
-    let extractedContent: string;
+    let extractedDocument: {
+      content: string;
+      pageTexts?: string[];
+    };
 
     try {
       // 提取文件内容
-      extractedContent = await this.extractFileContent(file);
+      extractedDocument = await this.extractFileContent(file);
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -116,7 +122,8 @@ export class DocumentsService {
     const createdDocument = await this.createAndIngestDocument({
       knowledgeBaseId,
       title: derivedTitle,
-      content: extractedContent
+      content: extractedDocument.content,
+      pageTexts: extractedDocument.pageTexts
     });
 
     try {
@@ -128,6 +135,10 @@ export class DocumentsService {
         error instanceof Error ? error.stack : undefined
       );
       throw new InternalServerErrorException("文档内容已创建，但原始文件保存失败，请检查 storage 目录后重试。");
+    }
+
+    if (extractedDocument.pageTexts?.length) {
+      await saveDocumentPreview(createdDocument.id, extractedDocument.pageTexts);
     }
 
     return createdDocument;
@@ -142,7 +153,7 @@ export class DocumentsService {
    * 3. 调用 AI Service 入库
    * 4. 更新状态为 INDEXED
    */
-  private async createAndIngestDocument(body: CreateDocumentDto) {
+  private async createAndIngestDocument(body: CreateDocumentDto & { pageTexts?: string[] }) {
     // 验证知识库存在
     const knowledgeBase = await this.prisma.knowledgeBase.findUnique({
       where: {
@@ -174,7 +185,8 @@ export class DocumentsService {
         documentId: document.id,
         knowledgeBaseId: body.knowledgeBaseId,
         title: body.title,
-        content: body.content
+        content: body.content,
+        pageTexts: body.pageTexts
       });
 
       // 入库成功，更新状态
@@ -225,7 +237,9 @@ export class DocumentsService {
         throw new BadRequestException("文件内容太短，无法索引。");
       }
 
-      return content;
+      return {
+        content,
+      };
     }
 
     // 【PDF 处理】
@@ -234,13 +248,16 @@ export class DocumentsService {
     );
 
     if (matchedPdfExtension) {
-      const content = this.normalizeDocumentContent(await this.extractPdfText(file.buffer));
+      const { content, pageTexts } = await this.extractPdfText(file.buffer);
 
       if (content.length < 10) {
         throw new BadRequestException("PDF 内容太短，无法索引。");
       }
 
-      return content;
+      return {
+        content,
+        pageTexts,
+      };
     }
 
     // 【不支持的格式】
@@ -256,25 +273,19 @@ export class DocumentsService {
    * 注意：这是一个同步操作，大文件可能需要较长时间
    */
   private async extractPdfText(fileBuffer: Buffer) {
-    let pdfParse: ((buffer: Buffer) => Promise<ParsedPdfDocument>) | undefined;
-
     try {
-      // 动态引入 pdf-parse（懒加载）
-      pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<ParsedPdfDocument>;
-    } catch {
-      throw new BadRequestException(
-        "PDF 解析需要安装 pdf-parse 包。请在项目根目录运行 pnpm install 后重试。"
-      );
-    }
-
-    try {
-      const parsedPdf = await pdfParse(fileBuffer);
-      return parsedPdf.text.trim();
+      const parsedPdf = await extractPdfTextWithPages(fileBuffer);
+      return {
+        content: this.normalizeDocumentContent(parsedPdf.text),
+        pageTexts: parsedPdf.pageTexts
+          .map((pageText) => this.normalizeDocumentContent(pageText))
+          .filter((pageText) => pageText.length > 0),
+      };
     } catch (error) {
       this.logger.warn(
         `PDF 解析失败: ${error instanceof Error ? error.message : "unknown error"}`
       );
-      throw new BadRequestException("PDF 解析失败。请确认文件未加密、未损坏，或先另存为新的 PDF 后重试。");
+      throw error;
     }
   }
 
@@ -286,6 +297,31 @@ export class DocumentsService {
       .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
       .replace(/\r\n/g, "\n")
       .trim();
+  }
+
+  private async getDocumentPageTexts(documentId: string) {
+    const savedPreview = await getDocumentPreview(documentId);
+    if (savedPreview?.pageTexts?.length) {
+      return savedPreview.pageTexts;
+    }
+
+    const asset = await getDocumentAsset(documentId);
+    if (!asset || asset.mimeType !== "application/pdf") {
+      return undefined;
+    }
+
+    const fileBuffer = await readFile(asset.absolutePath);
+    const extractedPreview = await extractPdfTextWithPages(fileBuffer);
+    const pageTexts = extractedPreview.pageTexts
+      .map((pageText) => this.normalizeDocumentContent(pageText))
+      .filter((pageText) => pageText.length > 0);
+
+    if (pageTexts.length) {
+      await saveDocumentPreview(documentId, pageTexts);
+      return pageTexts;
+    }
+
+    return undefined;
   }
 
   /**
@@ -320,11 +356,13 @@ export class DocumentsService {
 
     if (body.content) {
       try {
+        const pageTexts = await this.getDocumentPageTexts(updatedDocument.id);
         await this.aiService.ingestDocument({
           documentId: updatedDocument.id,
           knowledgeBaseId: updatedDocument.knowledgeBaseId,
           title: updatedDocument.title,
-          content: updatedDocument.content
+          content: updatedDocument.content,
+          pageTexts
         });
 
         // 入库成功，更新状态
@@ -384,11 +422,13 @@ export class DocumentsService {
     let ingestStatus: "queued" | "skipped" = "queued";
 
     try {
+      const pageTexts = await this.getDocumentPageTexts(existingDocument.id);
       await this.aiService.ingestDocument({
         documentId: existingDocument.id,
         knowledgeBaseId: existingDocument.knowledgeBaseId,
         title: existingDocument.title,
-        content: existingDocument.content
+        content: existingDocument.content,
+        pageTexts
       });
 
       const indexedDocument = await this.prisma.document.update({
