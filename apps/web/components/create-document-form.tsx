@@ -114,18 +114,16 @@ export function CreateDocumentForm({
   }
 
   return (
-    <section className="mt-8 rounded-3xl border border-[var(--border)] bg-white p-6 shadow-sm">
+    <section className="rounded-[24px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-5 shadow-[0_14px_32px_rgba(31,26,20,0.05)] backdrop-blur">
       <div className="max-w-2xl">
-        <h2 className="text-2xl font-semibold">新增文档</h2>
-        <p className="mt-2 leading-7 text-[var(--muted)]">
-          这一步会真实写入 PostgreSQL，并让对应知识库的文档数立刻变化。你现在可以继续手动粘贴文本，也可以上传纯文本文件。
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-strong)]">Add Content</p>
+        <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">新增文档</h2>
       </div>
 
-      <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+      <form className="mt-4 grid gap-3" onSubmit={handleSubmit}>
         {hideKnowledgeBaseSelect ? null : (
           <select
-            className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+            className="rounded-[18px] border border-[var(--border)] bg-white px-4 py-2.5 outline-none transition focus:border-[var(--brand)]"
             value={form.knowledgeBaseId}
             onChange={(event) =>
               setForm((current) => ({
@@ -142,10 +140,12 @@ export function CreateDocumentForm({
             ))}
           </select>
         )}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
-            className={`rounded-2xl px-4 py-2 text-sm ${
-              mode === "text" ? "bg-slate-900 text-white" : "border border-[var(--border)] bg-white"
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              mode === "text"
+                ? "bg-[var(--foreground)] text-white"
+                : "border border-[var(--border)] bg-white text-[var(--muted)]"
             }`}
             onClick={() => setMode("text")}
             type="button"
@@ -153,8 +153,10 @@ export function CreateDocumentForm({
             粘贴文本
           </button>
           <button
-            className={`rounded-2xl px-4 py-2 text-sm ${
-              mode === "file" ? "bg-slate-900 text-white" : "border border-[var(--border)] bg-white"
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              mode === "file"
+                ? "bg-[var(--foreground)] text-white"
+                : "border border-[var(--border)] bg-white text-[var(--muted)]"
             }`}
             onClick={() => setMode("file")}
             type="button"
@@ -163,7 +165,7 @@ export function CreateDocumentForm({
           </button>
         </div>
         <input
-          className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+          className="rounded-[18px] border border-[var(--border)] bg-white px-4 py-2.5 outline-none transition focus:border-[var(--brand)]"
           placeholder={mode === "file" ? "可选：给上传文件起一个展示标题" : "例如：React Compiler 机制梳理"}
           value={form.title}
           onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
@@ -172,7 +174,7 @@ export function CreateDocumentForm({
         />
         {mode === "text" ? (
           <textarea
-            className="min-h-32 rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+            className="min-h-28 rounded-[18px] border border-[var(--border)] bg-white px-4 py-2.5 outline-none transition focus:border-[var(--brand)]"
             placeholder="输入文档正文。为了通过后端校验，至少输入 10 个字符。"
             value={form.content}
             onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
@@ -180,7 +182,7 @@ export function CreateDocumentForm({
             minLength={10}
           />
         ) : (
-          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-slate-50 p-5">
+          <div className="rounded-[20px] border border-dashed border-[var(--border)] bg-white/56 p-4">
             <input
               accept=".txt,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf"
               className="block w-full text-sm"
@@ -199,7 +201,7 @@ export function CreateDocumentForm({
               type="file"
             />
             <p className="mt-3 text-sm text-[var(--muted)]">
-              当前支持 `.txt / .md / .markdown / .json / .csv / .pdf`。PDF 解析依赖 `pdf-parse`，如果你刚刚更新了代码，记得重新执行一次 `pnpm install`。
+              当前支持 `.txt / .md / .markdown / .json / .csv / .pdf`。
             </p>
             {selectedFile ? <p className="mt-2 text-sm">已选择：{selectedFile.name}</p> : null}
             {selectedFile ? (
@@ -220,7 +222,7 @@ export function CreateDocumentForm({
         )}
         <div className="flex flex-wrap items-center gap-3">
           <button
-            className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-[var(--foreground)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting || knowledgeBases.length === 0}
             type="submit"
           >

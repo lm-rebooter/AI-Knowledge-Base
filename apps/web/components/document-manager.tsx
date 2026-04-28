@@ -112,13 +112,11 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
   }
 
   return (
-    <section className="mt-8 rounded-3xl border border-[var(--border)] bg-white p-6 shadow-sm">
+    <section className="mt-8 rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-6 shadow-[0_20px_50px_rgba(31,26,20,0.06)] backdrop-blur lg:p-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold">文档列表</h2>
-          <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
-            这里可以查看某个知识库下的文档，并直接做编辑或删除。
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-strong)]">Documents</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">文档列表</h2>
         </div>
         <div className="flex flex-col items-end gap-2">
           {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
@@ -132,7 +130,10 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
           const isBusy = busyId === document.id;
 
           return (
-            <article key={document.id} className="rounded-2xl border border-[var(--border)] bg-slate-50 p-5">
+            <article
+              key={document.id}
+              className="rounded-[26px] border border-[var(--border)] bg-white/72 p-5 shadow-[0_12px_32px_rgba(31,26,20,0.04)]"
+            >
               {isEditing ? (
                 <div className="space-y-3">
                   <input
@@ -149,7 +150,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                   />
                   <div className="flex flex-wrap gap-3">
                     <button
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       disabled={isBusy}
                       onClick={() => handleSave(document.id)}
                       type="button"
@@ -157,7 +158,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                       {isBusy ? "保存中..." : "保存修改"}
                     </button>
                     <button
-                      className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm"
+                      className="rounded-full border border-[var(--border)] px-4 py-2 text-sm"
                       disabled={isBusy}
                       onClick={cancelEditing}
                       type="button"
@@ -210,14 +211,14 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
 
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-xl border border-[var(--border)] bg-white px-4 py-2 text-sm"
+                      className="rounded-full border border-[var(--border)] bg-white px-4 py-2 text-sm"
                       onClick={() => startEditing(document)}
                       type="button"
                     >
                       编辑
                     </button>
                     <button
-                      className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 disabled:opacity-60"
+                      className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 disabled:opacity-60"
                       disabled={isBusy}
                       onClick={() => handleReindex(document.id)}
                       type="button"
@@ -225,7 +226,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                       {isBusy ? "处理中..." : "重新入库"}
                     </button>
                     <button
-                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 disabled:opacity-60"
+                      className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 disabled:opacity-60"
                       disabled={isBusy}
                       onClick={() => handleDelete(document.id)}
                       type="button"

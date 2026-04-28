@@ -85,6 +85,7 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasLoadedLocalState, setHasLoadedLocalState] = useState(false);
+  const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -122,6 +123,17 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
   }, [hasLoadedLocalState, sessions]);
 
+  useEffect(() => {
+    function handleWindowClick() {
+      setMenuSessionId(null);
+    }
+
+    window.addEventListener("click", handleWindowClick);
+    return () => {
+      window.removeEventListener("click", handleWindowClick);
+    };
+  }, []);
+
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null,
     [activeSessionId, sessions]
@@ -149,6 +161,7 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
     setActiveSessionId(newSession.id);
     setQuestion("");
     setError(null);
+    setMenuSessionId(null);
   }
 
   function handleKnowledgeBaseChange(nextKnowledgeBaseId: string) {
@@ -161,6 +174,28 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
       knowledgeBaseId: nextKnowledgeBaseId,
       updatedAt: new Date().toISOString()
     }));
+  }
+
+  function handleDeleteSession(sessionId: string) {
+    const remainingSessions = sessions.filter((session) => session.id !== sessionId);
+
+    if (remainingSessions.length === 0) {
+      setSessions([]);
+      setActiveSessionId("");
+      setQuestion("");
+      setError(null);
+      setMenuSessionId(null);
+      return;
+    }
+
+    setSessions(remainingSessions);
+    setMenuSessionId(null);
+
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(remainingSessions[0].id);
+      setQuestion("");
+      setError(null);
+    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -228,34 +263,31 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
 
   return (
     <>
-      <aside className="overflow-hidden rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.68)] shadow-[0_24px_60px_rgba(34,28,20,0.08)] backdrop-blur">
-        <div className="border-b border-[var(--border)] px-5 py-5">
+      <aside className="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.68)] shadow-[0_18px_45px_rgba(34,28,20,0.08)] backdrop-blur">
+        <div className="border-b border-[var(--border)] px-4 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--brand-strong)]">
                 Conversations
               </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">聊天记录</h2>
+              <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">聊天记录</h2>
             </div>
             <button
-              className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-white transition hover:translate-y-[-1px] hover:bg-[var(--brand-strong)]"
+              className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--foreground)]"
               onClick={handleCreateSession}
               type="button"
             >
               新建
             </button>
           </div>
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-            左侧只负责切换会话，检索上下文已经改成在后端留存，不再占用页面空间。
-          </p>
         </div>
 
-        <div className="border-b border-[var(--border)] px-5 py-5">
+        <div className="border-b border-[var(--border)] px-4 py-4">
           <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
             当前知识库
           </label>
           <select
-            className="w-full rounded-2xl border border-[var(--border)] bg-white/90 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand)]"
+            className="w-full rounded-[18px] border border-[var(--border)] bg-white/90 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--brand)]"
             onChange={(event) => handleKnowledgeBaseChange(event.target.value)}
             value={activeSession?.knowledgeBaseId ?? defaultKnowledgeBaseId}
           >
@@ -267,100 +299,160 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
           </select>
         </div>
 
-        <div className="max-h-[720px] space-y-2 overflow-y-auto px-4 py-4">
+        <div className="max-h-[620px] space-y-2 overflow-y-auto px-3 py-3">
           {sessions.map((session) => {
             const isActive = session.id === activeSession?.id;
             const matchedKnowledgeBase = knowledgeBases.find(
               (knowledgeBase) => knowledgeBase.id === session.knowledgeBaseId
             );
+            const isMenuOpen = menuSessionId === session.id;
 
             return (
-              <button
+              <article
                 key={session.id}
-                className={`w-full rounded-[24px] px-4 py-4 text-left transition-all duration-200 ${
+                className={`relative overflow-visible rounded-[20px] px-3.5 py-3.5 transition-all duration-200 ${
                   isActive
                     ? "bg-[var(--foreground)] text-white shadow-[0_16px_40px_rgba(22,22,22,0.18)]"
                     : "bg-white/70 text-[var(--foreground)] hover:bg-white"
                 }`}
-                onClick={() => {
-                  setActiveSessionId(session.id);
-                  setError(null);
-                }}
-                type="button"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="line-clamp-2 text-base font-semibold leading-6">{session.title}</p>
-                  <span
-                    className={`shrink-0 text-xs ${isActive ? "text-white/70" : "text-[var(--muted)]"}`}
+                <div className="absolute right-3 top-3 z-20">
+                  <button
+                    aria-label="打开会话菜单"
+                    className={`rounded-full px-2 py-1 text-sm leading-none transition ${
+                      isActive ? "text-white/60 hover:bg-white/10" : "text-[var(--muted)] hover:bg-slate-100"
+                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setMenuSessionId((currentValue) =>
+                        currentValue === session.id ? null : session.id
+                      );
+                    }}
+                    type="button"
                   >
-                    {formatSessionTime(session.updatedAt)}
-                  </span>
+                    •••
+                  </button>
+
+                  {isMenuOpen ? (
+                    <div
+                      className="absolute right-0 top-9 w-28 rounded-2xl border border-[var(--border)] bg-white p-1.5 text-[var(--foreground)] shadow-[0_18px_36px_rgba(22,22,22,0.12)]"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        className="flex w-full items-center rounded-xl px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--ink-soft)] hover:text-[var(--foreground)]"
+                        onClick={() => {
+                          setActiveSessionId(session.id);
+                          setMenuSessionId(null);
+                        }}
+                        type="button"
+                      >
+                        查看会话
+                      </button>
+                      <button
+                        className="mt-1 flex w-full items-center rounded-xl px-3 py-2 text-sm text-red-600 transition hover:bg-red-50"
+                        onClick={() => handleDeleteSession(session.id)}
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-                <p
-                  className={`mt-2 line-clamp-2 text-sm leading-6 ${
-                    isActive ? "text-white/78" : "text-[var(--muted)]"
-                  }`}
+
+                <button
+                  className="block w-full pr-10 text-left"
+                  onClick={() => {
+                    setActiveSessionId(session.id);
+                    setError(null);
+                    setMenuSessionId(null);
+                  }}
+                  type="button"
                 >
-                  {getSessionPreview(session.messages)}
-                </p>
-                <p className={`mt-3 text-xs ${isActive ? "text-white/62" : "text-[var(--muted)]"}`}>
-                  {matchedKnowledgeBase?.name ?? "未指定知识库"}
-                </p>
-              </button>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="line-clamp-1 text-[15px] font-semibold leading-6">{session.title}</p>
+                    <span
+                      className={`shrink-0 text-xs ${isActive ? "text-white/70" : "text-[var(--muted)]"}`}
+                    >
+                      {formatSessionTime(session.updatedAt)}
+                    </span>
+                  </div>
+                  <p
+                    className={`mt-2 line-clamp-1 text-sm leading-6 ${
+                      isActive ? "text-white/78" : "text-[var(--muted)]"
+                    }`}
+                  >
+                    {getSessionPreview(session.messages)}
+                  </p>
+                  <p className={`mt-2 text-xs ${isActive ? "text-white/62" : "text-[var(--muted)]"}`}>
+                    {matchedKnowledgeBase?.name ?? "未指定知识库"}
+                  </p>
+                </button>
+              </article>
             );
           })}
         </div>
       </aside>
 
-      <section className="overflow-hidden rounded-[36px] border border-[var(--border)] bg-[rgba(255,255,255,0.74)] shadow-[0_24px_60px_rgba(34,28,20,0.08)] backdrop-blur">
-        <div className="border-b border-[var(--border)] px-6 py-6 lg:px-8">
+      <section className="overflow-hidden rounded-[30px] border border-[var(--border)] bg-[rgba(255,255,255,0.74)] shadow-[0_18px_45px_rgba(34,28,20,0.08)] backdrop-blur">
+        <div className="border-b border-[var(--border)] px-5 py-4 lg:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--brand-strong)]">
                 Workspace
               </p>
-              <h1 className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">
+              <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">
                 AI Chat
               </h1>
-              <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-                右侧是当前会话的工作区。你只管提问，后端会负责检索、问答和上下文留痕。
-              </p>
             </div>
 
-            <div className="rounded-[24px] border border-[var(--border)] bg-white/80 px-4 py-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">当前会话绑定</p>
-              <p className="mt-2 text-lg font-semibold">{activeKnowledgeBase?.name ?? "未指定知识库"}</p>
-            </div>
+            {activeSession ? (
+              <div className="rounded-[18px] border border-[var(--border)] bg-white/80 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">当前会话绑定</p>
+                <p className="mt-1 text-base font-semibold">{activeKnowledgeBase?.name ?? "未指定知识库"}</p>
+              </div>
+            ) : null}
           </div>
         </div>
 
-        <div className="flex min-h-[680px] flex-col">
-          <div className="flex-1 space-y-4 px-5 py-5 lg:px-8 lg:py-6">
-            {activeSession?.messages.map((message) => (
-              <div
-                key={message.id}
-                className={`max-w-[92%] rounded-[28px] px-5 py-4 transition-all duration-200 ${
-                  message.role === "user"
-                    ? "ml-auto bg-[var(--foreground)] text-white"
-                    : "bg-[var(--ink-soft)] text-[var(--foreground)]"
-                }`}
-              >
-                <p
-                  className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
-                    message.role === "user" ? "text-white/65" : "text-[var(--muted)]"
+        <div className="flex min-h-[620px] flex-col">
+          <div className="flex-1 space-y-3 px-4 py-4 lg:px-6 lg:py-5">
+            {activeSession ? (
+              activeSession.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`max-w-[92%] rounded-[22px] px-4 py-3 transition-all duration-200 ${
+                    message.role === "user"
+                      ? "ml-auto bg-[var(--foreground)] text-white"
+                      : "bg-[var(--ink-soft)] text-[var(--foreground)]"
                   }`}
                 >
-                  {message.role === "user" ? "你" : "助手"}
-                </p>
-                <p className="mt-2 whitespace-pre-wrap text-[15px] leading-8">{message.content}</p>
+                  <p
+                    className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                      message.role === "user" ? "text-white/65" : "text-[var(--muted)]"
+                    }`}
+                  >
+                    {message.role === "user" ? "你" : "助手"}
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap text-[14px] leading-7">{message.content}</p>
+                </div>
+              ))
+            ) : (
+              <div className="flex h-full min-h-[320px] items-center justify-center rounded-[24px] border border-dashed border-[var(--border)] bg-white/35 px-8 text-center">
+                <div>
+                  <p className="text-2xl font-semibold tracking-[-0.04em]">当前没有聊天记录</p>
+                  <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
+                    点击左上角“新建”，开始一条新的会话。
+                  </p>
+                </div>
               </div>
-            )) ?? null}
+            )}
           </div>
 
-          <div className="border-t border-[var(--border)] bg-white/68 px-5 py-5 lg:px-8">
+          <div className="border-t border-[var(--border)] bg-white/68 px-4 py-4 lg:px-6">
             <form className="grid gap-4" onSubmit={handleSubmit}>
               <textarea
-                className="min-h-32 rounded-[28px] border border-[var(--border)] bg-white px-5 py-4 text-[15px] outline-none transition focus:border-[var(--brand)]"
+                className="min-h-24 rounded-[20px] border border-[var(--border)] bg-white px-4 py-3 text-[14px] outline-none transition focus:border-[var(--brand)]"
+                disabled={!activeSession}
                 minLength={2}
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder="例如：客户以前没有实名在易签宝，现在三要素过不去，该怎么排查？"
@@ -368,13 +460,10 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
                 value={question}
               />
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <p className="text-sm text-[var(--muted)]">
-                  每条会话都会单独保存标题和内容，便于左侧快速切换。
-                </p>
                 <div className="flex flex-wrap items-center gap-3">
                   {error ? <p className="text-sm text-red-600">{error}</p> : null}
                   <button
-                    className="rounded-full bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white transition hover:translate-y-[-1px] hover:bg-[var(--brand-strong)] disabled:opacity-60"
+                    className="rounded-full bg-[var(--brand)] px-5 py-2.5 text-sm font-semibold text-white transition hover:translate-y-[-1px] hover:bg-[var(--brand-strong)] disabled:opacity-60"
                     disabled={isSubmitting || !activeSession}
                     type="submit"
                   >

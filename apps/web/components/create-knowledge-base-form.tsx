@@ -52,18 +52,15 @@ export function CreateKnowledgeBaseForm() {
   }
 
   return (
-    <section className="mt-8 rounded-3xl border border-[var(--border)] bg-white p-6 shadow-sm">
+    <section className="rounded-[24px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-5 shadow-[0_14px_32px_rgba(31,26,20,0.05)] backdrop-blur">
       <div className="max-w-2xl">
-        <h2 className="text-2xl font-semibold">新增知识库</h2>
-        <p className="mt-2 leading-7 text-[var(--muted)]">
-          这个表单会真实调用 NestJS 的 <code className="rounded bg-slate-100 px-2 py-1 text-sm">POST /api/knowledge-bases</code>
-          接口，并把数据写入 PostgreSQL。
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-strong)]">Create Space</p>
+        <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">新增知识库</h2>
       </div>
 
-      <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+      <form className="mt-4 grid gap-3" onSubmit={handleSubmit}>
         <input
-          className="rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+          className="rounded-[18px] border border-[var(--border)] bg-white px-4 py-2.5 outline-none transition focus:border-[var(--brand)]"
           placeholder="例如：React Compiler 研究"
           value={form.name}
           onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
@@ -71,7 +68,7 @@ export function CreateKnowledgeBaseForm() {
           minLength={2}
         />
         <textarea
-          className="min-h-28 rounded-2xl border border-[var(--border)] px-4 py-3 outline-none ring-0"
+          className="min-h-24 rounded-[18px] border border-[var(--border)] bg-white px-4 py-2.5 outline-none transition focus:border-[var(--brand)]"
           placeholder="简单描述这个知识库准备收集什么内容。"
           value={form.description}
           onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -79,7 +76,7 @@ export function CreateKnowledgeBaseForm() {
         />
         <div className="flex flex-wrap items-center gap-3">
           <button
-            className="rounded-2xl bg-[var(--brand)] px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-[var(--foreground)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}
             type="submit"
           >

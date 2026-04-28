@@ -1,0 +1,43 @@
+[
+  {
+    "id": "chat_1777343531604",
+    "createdAt": "2026-04-28T02:32:11.604Z",
+    "conversationId": "session-1777343225396-epq56e",
+    "knowledgeBaseId": "cmoi0b6an000013ba9gr2xpsh",
+    "question": "简述XSS和CSRF",
+    "answer": "示例回答：你问的是“简述XSS和CSRF”。 我当前基于知识片段给出的总结线索是：[cmoi0b6an000013ba9gr2xpsh] 每日一题答案: 说，如果条件判断结果为 true 就返回第一个操作数的值，如果为 false 就返回第二个操作数的值。\r\n&& 则相反，如果条件判断结果为 true 就返回第二个操作数的值，如果为 false 就返回第一个操作数的值。\r\n|| 和 && 返回它们其中一个操作数的值，而非条件判断的结果\r\n\r\n3. 简述XSS和CSRF\r\nXSS 攻击指的是跨站脚本攻击，是一种代码注入攻击。攻击者通过在网站注入恶意脚 | [cmoi0b6an000013ba9gr2xpsh] 每日一题答案: # 每日一题\r\n1. 简述CSS的两种盒模型\r\n盒模型都是由四个部分组成的，分别是margin、border、padding和content。\r\n标准盒模型和IE盒模型的区别在于设置width和height时，所对应的范围不同：\r\n标准盒模型的width和height属性的范围只包含了content，\r\nIE盒模型的width和height属性的范围包含了border、padding和conten。 后续你可以在这里替换成 OpenAI、Azure OpenAI 或其他模型调用。",
+    "contexts": [
+      "[cmoi0b6an000013ba9gr2xpsh] 每日一题答案: 说，如果条件判断结果为 true 就返回第一个操作数的值，如果为 false 就返回第二个操作数的值。\r\n&& 则相反，如果条件判断结果为 true 就返回第二个操作数的值，如果为 false 就返回第一个操作数的值。\r\n|| 和 && 返回它们其中一个操作数的值，而非条件判断的结果\r\n\r\n3. 简述XSS和CSRF\r\nXSS 攻击指的是跨站脚本攻击，是一种代码注入攻击。攻击者通过在网站注入恶意脚",
+      "[cmoi0b6an000013ba9gr2xpsh] 每日一题答案: # 每日一题\r\n1. 简述CSS的两种盒模型\r\n盒模型都是由四个部分组成的，分别是margin、border、padding和content。\r\n标准盒模型和IE盒模型的区别在于设置width和height时，所对应的范围不同：\r\n标准盒模型的width和height属性的范围只包含了content，\r\nIE盒模型的width和height属性的范围包含了border、padding和conten",
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: （LLM）作为其核心计算引\n擎，使其能够进行对话、执行任务、推理并展现一定程度的自主性。简而言之，代理是一个具有复杂推理能力、记忆\n和执行任务手段的系统。\n二、大模型（LLMs）agent 有哪些部分组成？\n在LLM赋能的自主agent系统中(LLM Agent)，LLM充当agent大脑的角色，并与若干关键组件协作 。\n•大模型（LLMs）agent 面\n•一、什么是 大模型（LLMs）agen"
+    ],
+    "fallbackUsed": false
+  },
+  {
+    "id": "chat_1777343491532",
+    "createdAt": "2026-04-28T02:31:31.532Z",
+    "conversationId": "session-1777343225396-epq56e",
+    "knowledgeBaseId": "cmoi0b6an000013ba9gr2xpsh",
+    "question": "xss 和 csrf有什么区别",
+    "answer": "示例回答：你问的是“xss 和 csrf有什么区别”。 我当前基于知识片段给出的总结线索是：[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: （LLM）作为其核心计算引\n擎，使其能够进行对话、执行任务、推理并展现一定程度的自主性。简而言之，代理是一个具有复杂推理能力、记忆\n和执行任务手段的系统。\n二、大模型（LLMs）agent 有哪些部分组成？\n在LLM赋能的自主agent系统中(LLM Agent)，LLM充当agent大脑的角色，并与若干关键组件协作 。\n•大模型（LLMs）agent 面\n•一、什么是 大模型（LLMs）agen | [cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: 这些步骤是什么并提前规划。\n2.1.1 拆解子目标和任务分解\n2.1.1.1 如何进行 拆解子目标和任务分解？\n2.1.1.2 拆解子目标和任务分解 有哪些方法？\n注：无论是CoT还是ToT，本质上是通过Prompt的精心设计，激发出模型原有的Metacognition\n只是如何通过某条神经元的线索能更加精准的调动出大脑中最擅长Planning的部分\n•拆解子目标和任务分解：Agent能够将大型任。 后续你可以在这里替换成 OpenAI、Azure OpenAI 或其他模型调用。",
+    "contexts": [
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: （LLM）作为其核心计算引\n擎，使其能够进行对话、执行任务、推理并展现一定程度的自主性。简而言之，代理是一个具有复杂推理能力、记忆\n和执行任务手段的系统。\n二、大模型（LLMs）agent 有哪些部分组成？\n在LLM赋能的自主agent系统中(LLM Agent)，LLM充当agent大脑的角色，并与若干关键组件协作 。\n•大模型（LLMs）agent 面\n•一、什么是 大模型（LLMs）agen",
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: 这些步骤是什么并提前规划。\n2.1.1 拆解子目标和任务分解\n2.1.1.1 如何进行 拆解子目标和任务分解？\n2.1.1.2 拆解子目标和任务分解 有哪些方法？\n注：无论是CoT还是ToT，本质上是通过Prompt的精心设计，激发出模型原有的Metacognition\n只是如何通过某条神经元的线索能更加精准的调动出大脑中最擅长Planning的部分\n•拆解子目标和任务分解：Agent能够将大型任",
+      "[cmoi0b6an000013ba9gr2xpsh] 1大模型（LLMs）agent 面: `A`、`B`、`C`、`D`。\n\"\"\"\nchat = doubao.ChatSkylark(model=\"skylark-chat\",temperature=0,top_p=0,top_k=1)\nquestion=\"我想卖一件衣服，但不知道哪款适合我，有什么好推荐吗\"\nmessages = [\n    HumanMessagePromptTemplate.from_template(\n     "
+    ],
+    "fallbackUsed": false
+  },
+  {
+    "id": "chat_1777342874847",
+    "createdAt": "2026-04-28T02:21:14.847Z",
+    "conversationId": "session-1777342851945-ku6qi1",
+    "knowledgeBaseId": "cmohzbaeo000114obzsm28fl2",
+    "question": "你是谁",
+    "answer": "示例回答：你问的是“你是谁”。 我当前基于知识片段给出的总结线索是：[cmohzbaeo000114obzsm28fl2] 当前还没有可检索到的入库片段。 | 你可以先新增文档并确保 ai-service 正在运行，然后再回来提问。。 后续你可以在这里替换成 OpenAI、Azure OpenAI 或其他模型调用。",
+    "contexts": [
+      "[cmohzbaeo000114obzsm28fl2] 当前还没有可检索到的入库片段。",
+      "你可以先新增文档并确保 ai-service 正在运行，然后再回来提问。"
+    ],
+    "fallbackUsed": false
+  }
+]

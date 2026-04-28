@@ -15,20 +15,15 @@ export function MainNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="max-w-md">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--brand-strong)]">
+    <nav className="mb-6 flex items-center justify-between gap-4 rounded-[24px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-4 py-3 shadow-[0_10px_30px_rgba(28,24,17,0.05)] backdrop-blur">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="rounded-full bg-[var(--foreground)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-white">
           AI KB
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">
-          构建面向企业知识运营的 AI 知识中枢
-        </h1>
-        <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-          聚合文档、检索、问答与会话留痕，让团队在统一界面里完成知识沉淀与问题响应。
-        </p>
+        </div>
+        <p className="truncate text-sm font-medium text-[var(--muted)]">企业 AI 知识库</p>
       </div>
 
-      <div className="flex flex-wrap gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-2 shadow-[0_18px_40px_rgba(28,24,17,0.06)] backdrop-blur">
+      <div className="flex flex-wrap gap-1 rounded-full bg-white/70 p-1">
         {links.map((link) => {
           const isActive =
             link.href === "/" ? pathname === link.href : pathname?.startsWith(link.href);
@@ -37,9 +32,9 @@ export function MainNav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-[var(--foreground)] text-white shadow-[0_10px_25px_rgba(22,22,22,0.18)]"
+                  ? "bg-[var(--foreground)] text-white shadow-[0_8px_20px_rgba(22,22,22,0.14)]"
                   : "text-[var(--muted)] hover:bg-white hover:text-[var(--foreground)]"
               }`}
             >

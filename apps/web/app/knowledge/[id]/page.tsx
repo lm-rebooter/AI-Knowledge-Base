@@ -46,23 +46,20 @@ export default async function KnowledgeBaseDetailPage({
   const knowledgeBase = await getKnowledgeBaseDetail(id);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
       <MainNav />
 
-      <section className="rounded-3xl border border-[var(--border)] bg-white p-8 shadow-sm">
-        <Link className="text-sm text-[var(--muted)]" href="/knowledge">
+      <section className="rounded-[40px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] p-8 shadow-[0_28px_70px_rgba(31,26,20,0.08)] backdrop-blur lg:p-10">
+        <Link className="text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]" href="/knowledge">
           返回知识库列表
         </Link>
-        <h1 className="mt-4 text-4xl font-bold">{knowledgeBase.name}</h1>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] lg:text-5xl">{knowledgeBase.name}</h1>
         <p className="mt-3 max-w-3xl leading-7 text-[var(--muted)]">
           {knowledgeBase.description || "这个知识库还没有补充描述，你可以后续继续扩展编辑能力。"}
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <span className="rounded-full bg-slate-100 px-4 py-2 text-sm">
+          <span className="rounded-full border border-[var(--border)] bg-white/84 px-4 py-2 text-sm">
             当前文档数：{knowledgeBase.documentCount}
-          </span>
-          <span className="rounded-full bg-blue-50 px-4 py-2 text-sm text-blue-700">
-            详情页已经接上真实文档数据
           </span>
         </div>
       </section>

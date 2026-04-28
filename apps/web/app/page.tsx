@@ -18,25 +18,25 @@ const capabilityBlocks = [
 
 export default function HomePage() {
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-5 py-8 lg:px-8">
+    <main className="mx-auto min-h-screen max-w-7xl px-5 py-5 lg:px-8">
       <MainNav />
-      <section className="overflow-hidden rounded-[40px] border border-[var(--border)] bg-[rgba(255,255,255,0.68)] shadow-[0_32px_80px_rgba(31,26,20,0.08)] backdrop-blur">
-        <div className="grid gap-10 px-7 py-8 lg:grid-cols-[1.3fr_0.7fr] lg:px-10 lg:py-12">
+      <section className="overflow-hidden rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.68)] shadow-[0_24px_60px_rgba(31,26,20,0.08)] backdrop-blur">
+        <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.25fr_0.75fr] lg:px-8 lg:py-7">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--brand-strong)]">
-              Enterprise Knowledge Layer
+              Overview
             </p>
-            <h1 className="mt-4 max-w-4xl text-5xl font-semibold leading-[1.02] tracking-[-0.06em] lg:text-6xl">
-              让文档、检索与问答真正进入业务现场
+            <h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-[1.04] tracking-[-0.06em] lg:text-5xl">
+              企业知识进入统一工作台
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-[var(--muted)] lg:text-lg">
-              面向企业内部知识运营场景，统一管理文档资产、构建可检索问答，并让一线问题响应、培训和知识复用进入同一套工作流。
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--muted)] lg:text-base">
+              用更紧凑的桌面工作界面统一管理知识库、文档入库与智能问答，让运营和支持团队可以在一屏内完成主要操作。
             </p>
           </div>
 
-          <div className="rounded-[32px] bg-[var(--foreground)] p-6 text-white shadow-[0_18px_40px_rgba(22,22,22,0.18)]">
+          <div className="rounded-[24px] bg-[var(--foreground)] p-5 text-white shadow-[0_14px_30px_rgba(22,22,22,0.16)]">
             <p className="text-xs uppercase tracking-[0.24em] text-white/60">Core Workflow</p>
-            <div className="mt-6 space-y-5 text-sm leading-7 text-white/82">
+            <div className="mt-4 space-y-4 text-sm leading-6 text-white/82">
               <div>
                 <p className="font-semibold text-white">1. 文档入池</p>
                 <p>上传 PDF、文本与业务说明，把分散资料统一接入知识库。</p>
@@ -54,7 +54,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-6 md:grid-cols-3">
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
         {capabilityBlocks.map((block) => (
           <SectionCard key={block.title} title={block.title} description={block.description} />
         ))}
