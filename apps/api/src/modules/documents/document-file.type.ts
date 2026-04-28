@@ -6,6 +6,7 @@ export type UploadedDocumentFile = {
   buffer: Buffer;
   mimetype: string;
   size: number;
+  path?: string;
 };
 
 export type ParsedPdfDocument = {

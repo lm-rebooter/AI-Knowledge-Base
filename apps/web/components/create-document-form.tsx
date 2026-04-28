@@ -41,6 +41,23 @@ export function CreateDocumentForm({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  function deriveTitleFromFileName(fileName: string) {
+    return fileName.replace(/\.[^.]+$/, "").trim();
+  }
+
+  function isSuspiciousFileName(fileName: string) {
+    // Common mojibake often contains dense Latin-1 supplement characters
+    // such as `Ã`, `æ`, `å`, `ä`, `ç`, `¢`, or replacement glyphs.
+    return /[ÃÂÅÆÐØÞßæøåäöü¢£¥¤]|�/.test(fileName);
+  }
+
+  const resolvedUploadTitle =
+    mode === "file" && selectedFile
+      ? form.title.trim() || deriveTitleFromFileName(selectedFile.name)
+      : "";
+  const showSuspiciousFileNameWarning =
+    mode === "file" && selectedFile ? isSuspiciousFileName(selectedFile.name) : false;
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -57,7 +74,7 @@ export function CreateDocumentForm({
 
         const payload = new FormData();
         payload.append("knowledgeBaseId", form.knowledgeBaseId);
-        payload.append("title", form.title.trim());
+        payload.append("title", form.title.trim() || deriveTitleFromFileName(selectedFile.name));
         payload.append("file", selectedFile);
 
         response = await apiRequest<ApiEnvelope<CreatedDocument>>("/documents/upload", {
@@ -167,7 +184,17 @@ export function CreateDocumentForm({
             <input
               accept=".txt,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf"
               className="block w-full text-sm"
-              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                setSelectedFile(file);
+
+                if (file && !form.title.trim()) {
+                  setForm((current) => ({
+                    ...current,
+                    title: deriveTitleFromFileName(file.name)
+                  }));
+                }
+              }}
               required
               type="file"
             />
@@ -175,6 +202,20 @@ export function CreateDocumentForm({
               当前支持 `.txt / .md / .markdown / .json / .csv / .pdf`。PDF 解析依赖 `pdf-parse`，如果你刚刚更新了代码，记得重新执行一次 `pnpm install`。
             </p>
             {selectedFile ? <p className="mt-2 text-sm">已选择：{selectedFile.name}</p> : null}
+            {selectedFile ? (
+              <div className="mt-3 rounded-2xl border border-[var(--border)] bg-white p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">标题预览</p>
+                <p className="mt-2 font-medium">{resolvedUploadTitle || "未命名文档"}</p>
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  如果你不修改标题，上传后会使用上面的标题作为文档名称和 chat 命中的展示标题。
+                </p>
+              </div>
+            ) : null}
+            {showSuspiciousFileNameWarning ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                检测到文件名可能存在乱码。建议你先在上方标题输入框里手动填写一个正常中文标题，再执行上传，这样知识库详情页和 chat 命中上下文都会展示正确名称。
+              </div>
+            ) : null}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3">

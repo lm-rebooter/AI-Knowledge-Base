@@ -11,6 +11,9 @@ type DocumentItem = {
   content: string;
   status: string;
   createdAt: string;
+  fileUrl?: string | null;
+  fileType?: string | null;
+  originalFileName?: string | null;
 };
 
 type DocumentManagerProps = {
@@ -24,12 +27,14 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   function startEditing(document: DocumentItem) {
     setEditingId(document.id);
     setDraftTitle(document.title);
     setDraftContent(document.content);
     setError(null);
+    setMessage(null);
   }
 
   function cancelEditing() {
@@ -42,6 +47,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
   async function handleDelete(id: string) {
     setBusyId(id);
     setError(null);
+    setMessage(null);
 
     try {
       await apiRequest<ApiEnvelope<{ id: string; deleted: boolean }>>(`/documents/${id}`, {
@@ -58,6 +64,7 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
   async function handleSave(id: string) {
     setBusyId(id);
     setError(null);
+    setMessage(null);
 
     const payload: UpdateDocumentDto = {
       title: draftTitle.trim(),
@@ -70,9 +77,35 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
         body: JSON.stringify(payload)
       });
       cancelEditing();
+      setMessage("文档已更新并触发重新入库。");
       router.refresh();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "更新文档失败。");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReindex(id: string) {
+    setBusyId(id);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const response = await apiRequest<
+        ApiEnvelope<{ id: string; title: string; status: string; ingestStatus: "queued" | "skipped" }>
+      >(`/documents/${id}/reindex`, {
+        method: "POST"
+      });
+
+      setMessage(
+        response.data.ingestStatus === "queued"
+          ? `文档「${response.data.title}」已重新入库。`
+          : `文档「${response.data.title}」重新入库失败，请检查 ai-service。`
+      );
+      router.refresh();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "重新入库失败。");
     } finally {
       setBusyId(null);
     }
@@ -87,7 +120,10 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
             这里可以查看某个知识库下的文档，并直接做编辑或删除。
           </p>
         </div>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <div className="flex flex-col items-end gap-2">
+          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        </div>
       </div>
 
       <div className="mt-6 space-y-4">
@@ -140,6 +176,33 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                       </span>
                     </div>
                     <p className="mt-3 whitespace-pre-wrap leading-7 text-slate-700">{document.content}</p>
+                    {document.fileUrl && document.fileType === "application/pdf" ? (
+                      <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
+                        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 text-sm">
+                          <span>原始 PDF 预览</span>
+                          <a
+                            className="font-medium text-[var(--brand)]"
+                            href={document.fileUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            新窗口打开
+                          </a>
+                        </div>
+                        <iframe
+                          className="h-[420px] w-full bg-white"
+                          src={document.fileUrl}
+                          title={document.originalFileName ?? document.title}
+                        />
+                      </div>
+                    ) : null}
+                    {document.fileUrl && document.fileType && document.fileType !== "application/pdf" ? (
+                      <p className="mt-4 text-sm">
+                        <a className="font-medium text-[var(--brand)]" href={document.fileUrl} rel="noreferrer" target="_blank">
+                          查看原文件：{document.originalFileName ?? document.title}
+                        </a>
+                      </p>
+                    ) : null}
                     <p className="mt-3 text-xs text-[var(--muted)]">
                       创建时间：{new Date(document.createdAt).toLocaleString("zh-CN")}
                     </p>
@@ -152,6 +215,14 @@ export function DocumentManager({ documents }: DocumentManagerProps) {
                       type="button"
                     >
                       编辑
+                    </button>
+                    <button
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 disabled:opacity-60"
+                      disabled={isBusy}
+                      onClick={() => handleReindex(document.id)}
+                      type="button"
+                    >
+                      {isBusy ? "处理中..." : "重新入库"}
                     </button>
                     <button
                       className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 disabled:opacity-60"

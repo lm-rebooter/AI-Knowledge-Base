@@ -25,4 +25,6 @@ export class UpdateDocumentDto {
   content?: string;
 }
 
-export type IngestDocumentRequest = CreateDocumentDto;
+export type IngestDocumentRequest = CreateDocumentDto & {
+  documentId?: string;
+};

@@ -39,23 +39,30 @@ class FaissStore:
     # heavy native dependencies too early in your learning path.
     def upsert(
         self,
+        document_id: Optional[str],
         knowledge_base_id: str,
         title: str,
         chunks: List[str],
         vectors: List[List[float]],
     ) -> None:
         entries = _load_entries()
-        filtered_entries = [
-            entry
-            for entry in entries
-            if not (
-                entry["knowledgeBaseId"] == knowledge_base_id
-                and entry["title"] == title
-            )
-        ]
+        if document_id:
+            filtered_entries = [
+                entry for entry in entries if entry.get("documentId") != document_id
+            ]
+        else:
+            filtered_entries = [
+                entry
+                for entry in entries
+                if not (
+                    entry["knowledgeBaseId"] == knowledge_base_id
+                    and entry["title"] == title
+                )
+            ]
 
         filtered_entries.extend(
             {
+                "documentId": document_id,
                 "knowledgeBaseId": knowledge_base_id,
                 "title": title,
                 "chunk": chunk,

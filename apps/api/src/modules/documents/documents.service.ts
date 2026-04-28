@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { DocumentStatus } from "@prisma/client";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
+import { createReadStream } from "fs";
+import { Response } from "express";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
 import { ParsedPdfDocument, UploadedDocumentFile } from "./document-file.type";
+import { getDocumentAsset, saveDocumentAsset } from "./document-asset.store";
 
 @Injectable()
 export class DocumentsService {
@@ -27,7 +30,8 @@ export class DocumentsService {
       id: document.id,
       title: document.title,
       knowledgeBaseId: document.knowledgeBaseId,
-      status: document.status.toLowerCase()
+      status: document.status.toLowerCase(),
+      fileUrl: `/api/documents/${document.id}/file`
     }));
   }
 
@@ -43,11 +47,15 @@ export class DocumentsService {
     const extractedContent = await this.extractFileContent(file);
     const derivedTitle = title?.trim() || file.originalname;
 
-    return this.createAndIngestDocument({
+    const createdDocument = await this.createAndIngestDocument({
       knowledgeBaseId,
       title: derivedTitle,
       content: extractedContent
     });
+
+    await saveDocumentAsset(createdDocument.id, file);
+
+    return createdDocument;
   }
 
   private async createAndIngestDocument(body: CreateDocumentDto) {
@@ -77,6 +85,7 @@ export class DocumentsService {
 
     try {
       await this.aiService.ingestDocument({
+        documentId: document.id,
         knowledgeBaseId: body.knowledgeBaseId,
         title: body.title,
         content: body.content
@@ -180,12 +189,100 @@ export class DocumentsService {
       }
     });
 
+    let finalStatus = updatedDocument.status;
+
+    try {
+      await this.aiService.ingestDocument({
+        documentId: updatedDocument.id,
+        knowledgeBaseId: updatedDocument.knowledgeBaseId,
+        title: updatedDocument.title,
+        content: updatedDocument.content
+      });
+
+      const indexedDocument = await this.prisma.document.update({
+        where: {
+          id
+        },
+        data: {
+          status: DocumentStatus.INDEXED
+        }
+      });
+
+      finalStatus = indexedDocument.status;
+    } catch (error) {
+      this.logger.warn(
+        `AI re-ingestion skipped for document ${updatedDocument.id}: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`
+      );
+    }
+
     return {
       id: updatedDocument.id,
       knowledgeBaseId: updatedDocument.knowledgeBaseId,
       title: updatedDocument.title,
       content: updatedDocument.content,
-      status: updatedDocument.status.toLowerCase()
+      status: finalStatus.toLowerCase(),
+      fileUrl: `/api/documents/${updatedDocument.id}/file`
+    };
+  }
+
+  async reindex(id: string) {
+    const existingDocument = await this.prisma.document.findUnique({
+      where: {
+        id
+      }
+    });
+
+    if (!existingDocument) {
+      throw new NotFoundException("Document not found.");
+    }
+
+    await this.prisma.document.update({
+      where: {
+        id
+      },
+      data: {
+        status: DocumentStatus.PROCESSING
+      }
+    });
+
+    let finalStatus: DocumentStatus = DocumentStatus.PROCESSING;
+    let ingestStatus: "queued" | "skipped" = "queued";
+
+    try {
+      await this.aiService.ingestDocument({
+        documentId: existingDocument.id,
+        knowledgeBaseId: existingDocument.knowledgeBaseId,
+        title: existingDocument.title,
+        content: existingDocument.content
+      });
+
+      const indexedDocument = await this.prisma.document.update({
+        where: {
+          id
+        },
+        data: {
+          status: DocumentStatus.INDEXED
+        }
+      });
+
+      finalStatus = indexedDocument.status;
+    } catch (error) {
+      ingestStatus = "skipped";
+      this.logger.warn(
+        `AI reindex skipped for document ${existingDocument.id}: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`
+      );
+    }
+
+    return {
+      id: existingDocument.id,
+      knowledgeBaseId: existingDocument.knowledgeBaseId,
+      title: existingDocument.title,
+      status: finalStatus.toLowerCase(),
+      ingestStatus
     };
   }
 
@@ -210,5 +307,31 @@ export class DocumentsService {
       id,
       deleted: true
     };
+  }
+
+  async streamFile(id: string, response: Response) {
+    const existingDocument = await this.prisma.document.findUnique({
+      where: {
+        id
+      }
+    });
+
+    if (!existingDocument) {
+      throw new NotFoundException("Document not found.");
+    }
+
+    const asset = await getDocumentAsset(id);
+
+    if (!asset) {
+      throw new NotFoundException("Document file not found.");
+    }
+
+    response.setHeader("Content-Type", asset.mimeType);
+    response.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(asset.originalFileName)}"`
+    );
+
+    return createReadStream(asset.absolutePath).pipe(response);
   }
 }

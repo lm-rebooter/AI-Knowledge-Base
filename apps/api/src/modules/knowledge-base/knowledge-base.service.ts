@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
+import { getDocumentAsset } from "../documents/document-asset.store";
 
 @Injectable()
 export class KnowledgeBaseService {
@@ -78,18 +79,29 @@ export class KnowledgeBaseService {
       throw new NotFoundException("Knowledge base not found.");
     }
 
+    const documentsWithAssets = await Promise.all(
+      knowledgeBase.documents.map(async (document) => {
+        const asset = await getDocumentAsset(document.id);
+
+        return {
+          id: document.id,
+          title: document.title,
+          content: document.content,
+          status: document.status.toLowerCase(),
+          createdAt: document.createdAt.toISOString(),
+          fileUrl: asset ? `/api/documents/${document.id}/file` : null,
+          fileType: asset?.mimeType ?? null,
+          originalFileName: asset?.originalFileName ?? null
+        };
+      })
+    );
+
     return {
       id: knowledgeBase.id,
       name: knowledgeBase.name,
       description: knowledgeBase.description,
       documentCount: knowledgeBase._count.documents,
-      documents: knowledgeBase.documents.map((document) => ({
-        id: document.id,
-        title: document.title,
-        content: document.content,
-        status: document.status.toLowerCase(),
-        createdAt: document.createdAt.toISOString()
-      }))
+      documents: documentsWithAssets
     };
   }
 

@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Res,
   UploadedFile,
   UseInterceptors
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Response } from "express";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
 import { UploadedDocumentFile } from "./document-file.type";
 import { DocumentsService } from "./documents.service";
@@ -38,9 +40,19 @@ export class DocumentsController {
     return this.documentsService.upload(file, knowledgeBaseId, title);
   }
 
+  @Get(":id/file")
+  async getFile(@Param("id") id: string, @Res() response: Response) {
+    return this.documentsService.streamFile(id, response);
+  }
+
   @Patch(":id")
   update(@Param("id") id: string, @Body() body: UpdateDocumentDto) {
     return this.documentsService.update(id, body);
+  }
+
+  @Post(":id/reindex")
+  reindex(@Param("id") id: string) {
+    return this.documentsService.reindex(id);
   }
 
   @Delete(":id")
