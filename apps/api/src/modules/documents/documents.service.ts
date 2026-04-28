@@ -16,7 +16,13 @@
  * - 纯文本：.txt, .md, .markdown, .json, .csv
  * - PDF：.pdf（通过 pdf-parse 提取文本）
  */
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException
+} from "@nestjs/common";
 import { DocumentStatus } from "@prisma/client";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
 import { createReadStream } from "fs";
@@ -29,6 +35,7 @@ import { getDocumentAsset, saveDocumentAsset } from "./document-asset.store";
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
+  private readonly maxUploadSizeBytes = 20 * 1024 * 1024;
 
   // 支持的纯文本格式
   private readonly supportedTextExtensions = [".txt", ".md", ".markdown", ".json", ".csv"];
@@ -77,8 +84,31 @@ export class DocumentsService {
       throw new BadRequestException("请上传文件。");
     }
 
-    // 提取文件内容
-    const extractedContent = await this.extractFileContent(file);
+    if (!file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException("上传文件内容为空，请重新选择文件后重试。");
+    }
+
+    if (file.size > this.maxUploadSizeBytes) {
+      throw new BadRequestException("上传文件过大，请控制在 20MB 以内。");
+    }
+
+    let extractedContent: string;
+
+    try {
+      // 提取文件内容
+      extractedContent = await this.extractFileContent(file);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `文档解析失败: ${file.originalname} (${file.size} bytes)`,
+        error instanceof Error ? error.stack : undefined
+      );
+      throw new BadRequestException("文件解析失败。请确认 PDF 未加密、未损坏，或先另存为新的 PDF 后重试。");
+    }
+
     // 使用指定标题或文件名作为文档标题
     const derivedTitle = title?.trim() || file.originalname;
 
@@ -89,8 +119,16 @@ export class DocumentsService {
       content: extractedContent
     });
 
-    // 保存原始文件到本地存储
-    await saveDocumentAsset(createdDocument.id, file);
+    try {
+      // 保存原始文件到本地存储
+      await saveDocumentAsset(createdDocument.id, file);
+    } catch (error) {
+      this.logger.error(
+        `文档文件保存失败: ${createdDocument.id} / ${file.originalname}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      throw new InternalServerErrorException("文档内容已创建，但原始文件保存失败，请检查 storage 目录后重试。");
+    }
 
     return createdDocument;
   }
@@ -181,7 +219,7 @@ export class DocumentsService {
 
     if (matchedExtension) {
       // Buffer 转 UTF-8 字符串
-      const content = file.buffer.toString("utf-8").trim();
+      const content = this.normalizeDocumentContent(file.buffer.toString("utf-8"));
 
       if (content.length < 10) {
         throw new BadRequestException("文件内容太短，无法索引。");
@@ -196,7 +234,7 @@ export class DocumentsService {
     );
 
     if (matchedPdfExtension) {
-      const content = await this.extractPdfText(file.buffer);
+      const content = this.normalizeDocumentContent(await this.extractPdfText(file.buffer));
 
       if (content.length < 10) {
         throw new BadRequestException("PDF 内容太短，无法索引。");
@@ -229,9 +267,23 @@ export class DocumentsService {
       );
     }
 
-    const parsedPdf = await pdfParse(fileBuffer);
-    // 返回提取的纯文本内容
-    return parsedPdf.text.trim();
+    try {
+      const parsedPdf = await pdfParse(fileBuffer);
+      return parsedPdf.text.trim();
+    } catch (error) {
+      this.logger.warn(
+        `PDF 解析失败: ${error instanceof Error ? error.message : "unknown error"}`
+      );
+      throw new BadRequestException("PDF 解析失败。请确认文件未加密、未损坏，或先另存为新的 PDF 后重试。");
+    }
+  }
+
+  private normalizeDocumentContent(content: string) {
+    return content
+      .replace(/\u0000/g, "")
+      .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+      .replace(/\r\n/g, "\n")
+      .trim();
   }
 
   /**

@@ -92,8 +92,37 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   // 【错误处理】
   // 状态码不在 200-299 范围内视为错误
   if (!response.ok) {
+    let errorMessage = `API 请求失败: ${response.status} ${response.statusText}`;
+
+    try {
+      const errorPayload = (await response.json()) as {
+        error?: string | { message?: string | string[] } | string[];
+      };
+      const rawError = errorPayload?.error;
+
+      if (typeof rawError === "string" && rawError.trim()) {
+        errorMessage = rawError;
+      } else if (Array.isArray(rawError) && rawError.length > 0) {
+        errorMessage = rawError.join("，");
+      } else if (
+        rawError &&
+        typeof rawError === "object" &&
+        "message" in rawError
+      ) {
+        const nestedMessage = rawError.message;
+
+        if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+          errorMessage = nestedMessage;
+        } else if (Array.isArray(nestedMessage) && nestedMessage.length > 0) {
+          errorMessage = nestedMessage.join("，");
+        }
+      }
+    } catch {
+      // Fall back to the generic HTTP status message when the response body is not JSON.
+    }
+
     throw new ApiRequestError(
-      `API 请求失败: ${response.status} ${response.statusText}`,
+      errorMessage,
       response.status
     );
   }

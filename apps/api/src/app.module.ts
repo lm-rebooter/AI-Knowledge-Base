@@ -1,4 +1,4 @@
-"""
+/**
 NestJS 根模块 - 整合所有功能模块
 
 【模块化架构】
@@ -23,7 +23,7 @@ NestJS 使用模块来组织代码，每个模块包含：
 │  ChatModule       │ 聊天问答                                │
 │  AiModule         │ AI 服务调用                             │
 └─────────────────────────────────────────────────────────────┘
-"""
+*/
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";

@@ -1,183 +1,53 @@
-/**
- * Prisma 数据模型定义
- *
- * 【什么是 Prisma？】
- * Prisma 是一个现代的 ORM（对象关系映射）工具：
- * - 用 Schema 文件定义数据模型
- * - 自动生成类型安全的客户端
- * - 支持 PostgreSQL、MySQL、SQLite 等数据库
- *
- * 【模型关系图】
- *
- * User ────────────── Chat
- *   │ (1:N)              │
- *   │                    │
- * KnowledgeBase ─────────┘
- *   │
- *   │
- * Document
- *
- * 【模型说明】
- *
- * User（用户）
- * - 用户信息，用于登录认证
- * - 与 Chat 是一对多关系（一个用户可以有多个会话）
- *
- * KnowledgeBase（知识库）
- * - 组织文档的容器
- * - 与 Document 是一对多关系
- *
- * Document（文档）
- * - 存储具体的知识内容
- * - status 表示处理状态：
- *   - PENDING: 等待处理
- *   - PROCESSING: 处理中
- *   - INDEXED: 已入库（可被检索）
- *   - FAILED: 处理失败
- *
- * Chat（问答记录）
- * - 存储用户提问和 AI 回答
- * - 用于会话历史和统计
- *
- * 【扩展建议】
- * - 添加 UserRole 枚举（ADMIN、USER）
- * - 添加 KnowledgeBasePermission 表（多对多关系）
- * - 添加 DocumentTag 表（文档标签）
- * - 添加 ChatFeedback 表（问答评价）
- */
+// Prisma schema for the AI knowledge base app.
+// Keep comments in Prisma's supported `//` style to avoid parser errors.
 
-// 【代码生成器配置】
-// prisma generate 会根据这个生成 @prisma/client 包
 generator client {
   provider = "prisma-client-js"
 }
 
-// 【数据源配置】
-// 指定使用 PostgreSQL 数据库，连接字符串从环境变量读取
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-/**
- * 用户模型
- *
- * 【字段】
- * - id: 唯一标识符（cuid 自动生成）
- * - email: 邮箱（唯一索引，用于登录）
- * - name: 用户昵称
- * - createdAt: 创建时间
- *
- * 【关系】
- * - chats: 该用户的会话列表（一对多）
- */
 model User {
-  id        String    @id @default(cuid())  // 自动生成唯一 ID
-  email     String    @unique               // 邮箱唯一索引
-  name      String                            // 用户昵称
-  createdAt DateTime  @default(now())        // 创建时间
-  chats     Chat[]                             // 关联的会话列表
-
-  // 隐式添加的索引: email（@unique 自动创建）
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  chats     Chat[]
 }
 
-/**
- * 知识库模型
- *
- * 【字段】
- * - id: 唯一标识符
- * - name: 知识库名称（唯一索引）
- * - description: 描述信息（可选）
- * - createdAt: 创建时间
- *
- * 【关系】
- * - documents: 该知识库下的文档列表（一对多）
- */
 model KnowledgeBase {
   id          String     @id @default(cuid())
-  name        String     @unique               // 知识库名称必须唯一
-  description String?                            // 可选的描述信息
-  documents   Document[]                         // 关联的文档列表
+  name        String     @unique
+  description String?
+  documents   Document[]
   createdAt   DateTime   @default(now())
-
-  // 隐式添加的索引: name（@unique 自动创建）
 }
 
-/**
- * 文档模型
- *
- * 【字段】
- * - id: 唯一标识符
- * - title: 文档标题
- * - content: 文档内容（纯文本）
- * - status: 处理状态（PENDING/PROCESSING/INDEXED/FAILED）
- * - knowledgeBaseId: 所属知识库 ID
- * - createdAt: 创建时间
- *
- * 【关系】
- * - knowledgeBase: 所属的知识库（多对一）
- *
- * 【索引建议】
- * 可以添加 composite index on (knowledgeBaseId, status)
- * 加快按知识库筛选文档的速度
- */
 model Document {
-  id              String        @id @default(cuid())
-  title           String                              // 文档标题
-  content         String                              // 文档内容（纯文本）
-  status          DocumentStatus @default(PENDING)   // 处理状态
-  knowledgeBaseId String                              // 外键：所属知识库
-  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id])
-  createdAt       DateTime      @default(now())
-
-  // 【外键关系】
-  // references: [id] 表示这列关联到 KnowledgeBase.id
-  // onDelete: Cascade 等行为可以通过 @relation 属性配置
-
-  // 隐式添加的索引: knowledgeBaseId（外键自动创建）
+  id              String         @id @default(cuid())
+  title           String
+  content         String
+  status          DocumentStatus @default(PENDING)
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase  @relation(fields: [knowledgeBaseId], references: [id])
+  createdAt       DateTime       @default(now())
 }
 
-/**
- * 会话（问答记录）模型
- *
- * 【字段】
- * - id: 唯一标识符
- * - question: 用户提问
- * - answer: AI 回答
- * - userId: 用户 ID
- * - createdAt: 创建时间
- *
- * 【关系】
- * - user: 所属用户（多对一）
- *
- * 【扩展建议】
- * - 添加 conversationId 字段（分组会话）
- * - 添加 contexts 字段（引用的文档片段）
- * - 添加 feedback 字段（用户评价）
- */
 model Chat {
   id        String   @id @default(cuid())
-  question  String                            // 用户的问题
-  answer    String                            // AI 的回答
-  userId    String                            // 外键：所属用户
+  question  String
+  answer    String
+  userId    String
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
-
-  // 隐式添加的索引: userId（外键自动创建）
 }
 
-/**
- * 文档状态枚举
- *
- * 用于跟踪文档的处理进度：
- * - PENDING: 等待处理（新上传）
- * - PROCESSING: 处理中（正在切片、向量化）
- * - INDEXED: 已完成（可被检索）
- * - FAILED: 处理失败（需要排查）
- */
 enum DocumentStatus {
-  PENDING      // 等待处理
-  PROCESSING   // 处理中
-  INDEXED      // 已入库
-  FAILED       // 失败
+  PENDING
+  PROCESSING
+  INDEXED
+  FAILED
 }

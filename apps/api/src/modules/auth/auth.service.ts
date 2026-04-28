@@ -1,4 +1,4 @@
-"""
+/**
 认证服务 - 处理用户登录和 JWT 令牌
 
 【JWT 认证流程】
@@ -34,7 +34,7 @@ Header.Payload.Signature
 3. Token 有效期
    建议设置较短的过期时间（如 1 小时）
    并实现 Refresh Token 机制
-"""
+*/
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { LoginDto } from "@ai-kb/shared";

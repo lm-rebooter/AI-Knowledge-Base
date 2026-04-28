@@ -1,4 +1,4 @@
-"""
+/**
 NestJS 应用入口文件
 
 【项目定位】
@@ -13,7 +13,7 @@ NestJS 应用入口文件
 3. 内置依赖注入
 4. 与 TypeScript 深度集成
 5. 丰富的生态系统（Prisma、Passport、JWT 等）
-"""
+*/
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";

@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Res,
-  UploadedFile,
-  UseInterceptors
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { CreateDocumentDto, UpdateDocumentDto } from "@ai-kb/shared";
@@ -18,6 +7,8 @@ import { DocumentsService } from "./documents.service";
 
 @Controller("documents")
 export class DocumentsController {
+  private static readonly MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
+
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get()
@@ -31,7 +22,13 @@ export class DocumentsController {
   }
 
   @Post("upload")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: {
+        fileSize: DocumentsController.MAX_UPLOAD_SIZE_BYTES
+      }
+    })
+  )
   upload(
     @UploadedFile() file: UploadedDocumentFile,
     @Body("knowledgeBaseId") knowledgeBaseId: string,
