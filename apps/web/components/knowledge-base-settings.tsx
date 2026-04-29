@@ -24,6 +24,7 @@ export function KnowledgeBaseSettings({
     description: description ?? ""
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +90,31 @@ export function KnowledgeBaseSettings({
     }
   }
 
+  async function handleRebuildIndex() {
+    setIsRebuilding(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await apiRequest<
+        ApiEnvelope<{ id: string; rebuiltCount: number }>
+      >(`/knowledge-bases/${id}/rebuild-index`, {
+        method: "POST"
+      });
+
+      setMessage(
+        response.data.rebuiltCount > 0
+          ? `知识库索引已重建，共重新入库 ${response.data.rebuiltCount} 篇文档。`
+          : "当前知识库没有文档可重建。"
+      );
+      router.refresh();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "重建索引失败。");
+    } finally {
+      setIsRebuilding(false);
+    }
+  }
+
   return (
     <section className="mt-8 rounded-[32px] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] p-6 shadow-[0_20px_50px_rgba(31,26,20,0.06)] backdrop-blur lg:p-7">
       <div className="max-w-2xl">
@@ -119,8 +145,16 @@ export function KnowledgeBaseSettings({
             {isSaving ? "保存中..." : "保存知识库"}
           </button>
           <button
+            className="rounded-full border border-[var(--border)] bg-white px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--foreground)] disabled:opacity-60"
+            disabled={isRebuilding || isSaving || isDeleting}
+            onClick={handleRebuildIndex}
+            type="button"
+          >
+            {isRebuilding ? "重建中..." : "重建索引"}
+          </button>
+          <button
             className="rounded-full border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 disabled:opacity-60"
-            disabled={isDeleting}
+            disabled={isDeleting || isRebuilding}
             onClick={handleDelete}
             type="button"
           >

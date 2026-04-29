@@ -471,6 +471,14 @@ export class DocumentsService {
       throw new NotFoundException("文档不存在。");
     }
 
+    try {
+      await this.aiService.deleteDocumentIndex(existingDocument.id);
+    } catch (error) {
+      this.logger.warn(
+        `AI 索引删除跳过，文档 ${existingDocument.id}: ${error instanceof Error ? error.message : "未知错误"}`
+      );
+    }
+
     // 删除文档记录
     await this.prisma.document.delete({
       where: {

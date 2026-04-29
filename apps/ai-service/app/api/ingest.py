@@ -88,3 +88,21 @@ def ingest_document(payload: IngestRequest) -> dict:
 
     # 【Step 5】返回入库摘要
     return summarize_ingest_result(payload.title, payload.knowledge_base_id, chunks, vectors)
+
+
+@router.delete("/index/documents/{document_id}")
+def delete_document_index(document_id: str) -> dict:
+    removed_count = FaissStore().delete_document(document_id)
+    return {
+        "documentId": document_id,
+        "removedCount": removed_count,
+    }
+
+
+@router.delete("/index/knowledge-bases/{knowledge_base_id}")
+def delete_knowledge_base_index(knowledge_base_id: str) -> dict:
+    removed_count = FaissStore().delete_knowledge_base(knowledge_base_id)
+    return {
+        "knowledgeBaseId": knowledge_base_id,
+        "removedCount": removed_count,
+    }

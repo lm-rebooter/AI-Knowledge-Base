@@ -8,7 +8,7 @@ type DocumentPreviewRecord = {
   extractorVersion?: number;
 };
 
-const CURRENT_EXTRACTOR_VERSION = 2;
+const CURRENT_EXTRACTOR_VERSION = 3;
 const STORAGE_ROOT = resolve(process.cwd(), "storage");
 const PREVIEW_INDEX_PATH = join(STORAGE_ROOT, "document-previews.json");
 

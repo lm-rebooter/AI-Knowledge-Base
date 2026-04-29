@@ -13,6 +13,7 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  contexts?: string[];
 };
 
 type ChatSession = {
@@ -41,6 +42,31 @@ type ChatWorkspaceProps = {
 };
 
 const STORAGE_KEY = "ai-kb-chat-sessions";
+
+type ParsedContext = {
+  id: string;
+  title: string;
+  excerpt: string;
+};
+
+function parseContext(context: string, index: number): ParsedContext {
+  const normalized = context.trim();
+  const matched = normalized.match(/^\[[^\]]+\]\s*([^:：\n]+)[:：]\s*(.*)$/s);
+
+  if (!matched) {
+    return {
+      id: `context-${index}`,
+      title: `来源 ${index + 1}`,
+      excerpt: normalized
+    };
+  }
+
+  return {
+    id: `context-${index}`,
+    title: matched[1].trim(),
+    excerpt: matched[2].trim()
+  };
+}
 
 function createAssistantIntroMessage(): ChatMessage {
   return {
@@ -311,7 +337,8 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
           {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: response.data.answer
+            content: response.data.answer,
+            contexts: response.data.contexts ?? []
           }
         ],
         updatedAt: new Date().toISOString()
@@ -501,6 +528,30 @@ export function ChatWorkspace({ knowledgeBases }: ChatWorkspaceProps) {
                     {message.role === "user" ? "你" : "助手"}
                   </p>
                   <p className="mt-2 whitespace-pre-wrap text-[14px] leading-7">{message.content}</p>
+                  {message.role === "assistant" && message.contexts?.length ? (
+                    <details className="mt-4 rounded-[18px] border border-[var(--border)] bg-white/72 px-3 py-3 text-[var(--foreground)]">
+                      <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                        查看命中片段
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        {message.contexts.map((context, index) => {
+                          const parsedContext = parseContext(context, index);
+
+                          return (
+                            <article
+                              key={`${message.id}-${parsedContext.id}`}
+                              className="rounded-[16px] border border-[var(--border)] bg-[var(--ink-soft)] px-3 py-3"
+                            >
+                              <p className="text-sm font-semibold">{parsedContext.title}</p>
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                                {parsedContext.excerpt}
+                              </p>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               ))
             ) : (

@@ -26,6 +26,11 @@ export class KnowledgeBaseController {
     return this.knowledgeBaseService.update(id, body);
   }
 
+  @Post(":id/rebuild-index")
+  rebuildIndex(@Param("id") id: string) {
+    return this.knowledgeBaseService.rebuildIndex(id);
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.knowledgeBaseService.remove(id);

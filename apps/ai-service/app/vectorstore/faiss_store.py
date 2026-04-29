@@ -34,41 +34,247 @@
 - Chroma（专为 LLM 设计）
 """
 import json
+import os
 import re
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+import fcntl
 
 
 # 【存储路径】
 # 所有数据存放在 data/knowledge_store.json
 # 使用 Path 处理跨平台路径兼容性
 STORE_PATH = Path(__file__).resolve().parents[1] / ".." / "data" / "knowledge_store.json"
+LOCK_PATH = STORE_PATH.with_suffix(".lock")
+
+QUESTION_STOPWORDS = {
+    "一下",
+    "一下子",
+    "一下吧",
+    "一下呢",
+    "一下呀",
+    "一下下",
+    "什么",
+    "为什么",
+    "怎么",
+    "怎样",
+    "如何",
+    "请问",
+    "这个",
+    "那个",
+    "说说",
+    "介绍",
+    "讲讲",
+    "说一下",
+    "讲一下",
+    "区别",
+    "实现",
+    "方法",
+    "方式",
+    "吗",
+    "呢",
+    "吧",
+    "的",
+    "了",
+    "和",
+    "与",
+    "或",
+}
 
 
 def _ensure_store_file() -> None:
     """确保存储文件存在，必要时创建空数组文件"""
     STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not STORE_PATH.exists():
         STORE_PATH.write_text("[]", encoding="utf-8")
+    if not LOCK_PATH.exists():
+        LOCK_PATH.write_text("", encoding="utf-8")
+
+
+def _repair_corrupted_store_text(raw_text: str) -> Optional[List[Dict]]:
+    """
+    尝试修复已知的 JSON 索引损坏模式。
+
+    目前最常见的是数组中间被误写入 `] },`，把后续对象挤到了数组外面。
+    这里优先做保守修复；修复成功后会落盘，避免服务反复启动失败。
+    """
+    sanitized_text = raw_text
+
+    # 把意外出现在数组中间的结束符修回逗号分隔。
+    sanitized_text = re.sub(r"\]\s*},\s*(\{)", r",\n\1", sanitized_text)
+
+    # 某些坏写入会把逗号单独留在行上，顺便规范一下。
+    sanitized_text = re.sub(r"\n\s*,\s*\n", ",\n", sanitized_text)
+
+    if sanitized_text == raw_text:
+        return None
+
+    try:
+        return json.loads(sanitized_text)
+    except json.JSONDecodeError:
+        return None
+
+
+@contextmanager
+def _store_lock():
+    """
+    为 JSON 向量库提供进程级文件锁，避免并发重建/删除时把文件写坏。
+    """
+    _ensure_store_file()
+    with LOCK_PATH.open("r+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _load_entries_unlocked() -> List[Dict]:
+    raw_text = STORE_PATH.read_text(encoding="utf-8").strip()
+    if not raw_text:
+        return []
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError:
+        repaired_entries = _repair_corrupted_store_text(raw_text)
+        if repaired_entries is None:
+            raise
+
+        _save_entries_unlocked(repaired_entries)
+        return repaired_entries
 
 
 def _load_entries() -> List[Dict]:
     """从文件加载所有条目"""
-    _ensure_store_file()
-    return json.loads(STORE_PATH.read_text(encoding="utf-8"))
+    with _store_lock():
+        return _load_entries_unlocked()
+
+
+def _save_entries_unlocked(entries: List[Dict]) -> None:
+    serialized = json.dumps(entries, ensure_ascii=False, indent=2)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=str(STORE_PATH.parent),
+        delete=False,
+    ) as temp_file:
+        temp_file.write(serialized)
+        temp_path = temp_file.name
+
+    os.replace(temp_path, STORE_PATH)
 
 
 def _save_entries(entries: List[Dict]) -> None:
-    """将条目写入文件"""
-    STORE_PATH.write_text(
-        json.dumps(entries, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """将条目原子写入文件"""
+    with _store_lock():
+        _save_entries_unlocked(entries)
 
 
 def _normalize_text(text: str) -> str:
     """压缩多余空白，便于展示拼接后的连续上下文。"""
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _canonical_search_text(text: str) -> str:
+    """
+    生成更适合检索的紧凑文本，解决 PDF 抽取中空格、全角符号和换行造成的短语错位。
+    """
+    normalized = text.lower()
+    normalized = normalized.replace("．", ".").replace("。", ".")
+    normalized = re.sub(r"\s+", "", normalized)
+    return normalized
+
+
+def _measure_terms(text: str) -> Set[str]:
+    canonical = _canonical_search_text(text)
+    return set(re.findall(r"\d+(?:\.\d+)?(?:px|rem|em|%)", canonical))
+
+
+def _ascii_terms(text: str) -> Set[str]:
+    canonical = _canonical_search_text(text)
+    return set(re.findall(r"[a-z][a-z0-9_#.-]{1,}", canonical))
+
+
+def _search_terms(text: str) -> Set[str]:
+    """
+    提取更稳定的检索词。
+
+    这里刻意不再使用大量中文单字参与主排序，因为单字会把“线”“事”“用”
+    这类高频字放大，导致 cloneDeep、事件委托等无关片段被误召回。
+    """
+    canonical = _canonical_search_text(text)
+    terms = set(re.findall(r"\d+(?:\.\d+)?(?:px|rem|em|%)", canonical))
+    terms.update(_ascii_terms(text))
+
+    chinese_segments = re.findall(r"[\u4e00-\u9fff]{2,}", canonical)
+    for segment in chinese_segments:
+        if segment in QUESTION_STOPWORDS:
+            continue
+        max_size = min(6, len(segment))
+        for size in range(2, max_size + 1):
+            for start in range(0, len(segment) - size + 1):
+                term = segment[start : start + size]
+                if term not in QUESTION_STOPWORDS:
+                    terms.add(term)
+
+    return {term for term in terms if term and term not in QUESTION_STOPWORDS}
+
+
+def _term_weight(term: str) -> int:
+    if re.fullmatch(r"\d+(?:\.\d+)?(?:px|rem|em|%)", term):
+        return 8
+    if re.search(r"\d", term):
+        return 5
+    if len(term) >= 5:
+        return 4
+    if len(term) >= 3:
+        return 3
+    return 2
+
+
+def _phrase_candidates(question: str) -> Set[str]:
+    canonical = _canonical_search_text(question)
+    phrases = set()
+
+    for segment in re.findall(r"[\u4e00-\u9fff0-9a-z.%-]{3,}", canonical):
+        trimmed = segment
+        for stopword in QUESTION_STOPWORDS:
+            trimmed = trimmed.replace(stopword, "")
+        if len(trimmed) >= 3:
+            phrases.add(trimmed)
+
+    phrases.update(_measure_terms(question))
+    return phrases
+
+
+def _lexical_relevance_score(question: str, chunk: str) -> int:
+    query_terms = _search_terms(question)
+    if not query_terms:
+        return 0
+
+    chunk_terms = _search_terms(chunk)
+    matched_terms = query_terms & chunk_terms
+    matched_weight = sum(_term_weight(term) for term in matched_terms)
+    total_weight = sum(_term_weight(term) for term in query_terms)
+    coverage = matched_weight / max(total_weight, 1)
+
+    score = int(matched_weight * 4 + coverage * 18)
+    canonical_chunk = _canonical_search_text(chunk)
+
+    for phrase in _phrase_candidates(question):
+        if phrase and phrase in canonical_chunk:
+            score += 12 if len(phrase) >= 4 else 7
+
+    # 如果问题里有强约束项（如 0.5px、ES6、HTTP2），候选片段必须命中它们。
+    question_measures = _measure_terms(question)
+    if question_measures and not (question_measures & _measure_terms(chunk)):
+        score -= 18
+
+    return score
 
 
 def _dedupe_lines(lines: List[str]) -> List[str]:
@@ -105,22 +311,7 @@ def _tokenize(text: str) -> Set[str]:
     【生产环境建议】
     使用 jieba 分词或直接调用 Embedding API 让模型处理语义
     """
-    normalized = text.lower()
-    words = set(re.findall(r"[A-Za-z0-9_]+", normalized))
-
-    # 为中文补充“词组级”召回，避免只按单字命中导致目录和正文难以区分。
-    chinese_segments = re.findall(r"[\u4e00-\u9fff]{2,}", normalized)
-    for segment in chinese_segments:
-        words.add(segment)
-        for size in (2, 3, 4):
-            if len(segment) < size:
-                continue
-            for start in range(0, len(segment) - size + 1):
-                words.add(segment[start : start + size])
-
-    # 保留单字，兼容短问题，但不作为唯一信号。
-    words.update(re.findall(r"[\u4e00-\u9fff]", normalized))
-    return {word for word in words if word.strip()}
+    return _search_terms(text)
 
 
 def _is_toc_like(chunk: str) -> bool:
@@ -131,8 +322,77 @@ def _is_toc_like(chunk: str) -> bool:
     question_count = len(re.findall(r"第\d+题", normalized))
     dotted_leader_count = len(re.findall(r"[.。·…]{6,}", normalized))
     has_catalog = "目录" in normalized
+
+    if has_catalog or question_count >= 3 or dotted_leader_count >= 2:
+        return True
+
+    # PDF 里很多正文页也包含页码和短标题；只要已经有明显解释/代码信号，
+    # 就不要因为“短行多”误判成目录。
+    has_answer_signal = _answer_signal_score(chunk) >= 6
+    if has_answer_signal:
+        return False
+
     has_many_page_numbers = len(re.findall(r"\n?\d{1,3}\n", chunk)) >= 3
-    return has_catalog or question_count >= 3 or dotted_leader_count >= 2 or has_many_page_numbers
+    has_many_short_topic_lines = (
+        len([line for line in chunk.splitlines() if 3 <= len(line.strip()) <= 36]) >= 10
+    )
+    return (
+        (has_many_page_numbers and not has_answer_signal)
+        or (has_many_short_topic_lines and not has_answer_signal)
+    )
+
+
+def _answer_signal_score(chunk: str) -> int:
+    """
+    判断片段是否真的像“答案正文”。
+
+    轻量检索没有真正语义理解，所以这里用解释词、实现词和代码痕迹给正文加权，
+    避免题目清单、目录页仅凭命中标题就排到最前。
+    """
+    normalized = _canonical_search_text(chunk)
+    score = 0
+
+    keyword_groups = [
+        ["是", "指", "称为", "称之为", "直译成", "相当于", "属于", "表示"],
+        ["可以", "能够", "会", "不会", "需要", "用于", "通过", "采用"],
+        ["原因", "作用", "方式", "方法", "步骤", "例如", "比如", "主要", "包括"],
+        ["优化", "避免", "减少", "触发", "频率", "保证", "执行", "渲染", "布局"],
+    ]
+    for keywords in keyword_groups:
+        if any(_canonical_search_text(keyword) in normalized for keyword in keywords):
+            score += 2
+
+    if re.search(r"(?:^|\n).{1,24}[:：]", chunk):
+        score += 2
+
+    if any(keyword in normalized for keyword in ["function", "return", "const", "let", "settimeout", "cleartimeout"]):
+        score += 4
+
+    if any(keyword in normalized for keyword in ["<meta", "viewport", "border-image", "scale()", "display", "position"]):
+        score += 3
+
+    sentence_like_count = len(re.findall(r"[。；;]|，|,", chunk))
+    score += min(sentence_like_count, 4)
+
+    if len(chunk.strip()) >= 120:
+        score += 1
+    if len(chunk.strip()) >= 260:
+        score += 1
+
+    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+    short_lines = [line for line in lines if 3 <= len(line) <= 42]
+    has_code_signal = any(keyword in normalized for keyword in ["function", "return", "const", "let", "<meta"])
+    has_definition_signal = bool(re.search(r"(?:^|\n).{1,24}[:：]", chunk))
+    if (
+        len(short_lines) >= 10
+        and len(short_lines) / max(len(lines), 1) >= 0.7
+        and sentence_like_count <= 2
+        and not has_code_signal
+        and not has_definition_signal
+    ):
+        score = min(score, 4)
+
+    return score
 
 
 def _is_question_list_like(chunk: str) -> bool:
@@ -152,11 +412,60 @@ def _is_question_list_like(chunk: str) -> bool:
     return numbered_items >= 4 or short_question_lines >= 4
 
 
+def _topic_list_penalty(chunk: str, question: str) -> int:
+    """
+    对“只列题目、没有答案”的片段降权。
+    """
+    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+    if not lines:
+        return 0
+
+    answer_score = _answer_signal_score(chunk)
+    short_lines = [line for line in lines if 3 <= len(line) <= 42]
+    questionish_lines = [
+        line
+        for line in short_lines
+        if _is_question_heading(line)
+        or any(marker in line for marker in ["什么", "区别", "如何", "为什么", "吗", "了解"])
+    ]
+
+    penalty = 0
+    has_code_signal = any(
+        keyword in _canonical_search_text(chunk)
+        for keyword in ["function", "return", "const", "let", "<meta", "settimeout", "cleartimeout"]
+    )
+    has_definition_signal = bool(re.search(r"(?:^|\n).{1,24}[:：]", chunk))
+    sentence_like_count = len(re.findall(r"[。；;]|，|,", chunk))
+
+    if len(questionish_lines) >= 4 and answer_score < 10:
+        penalty += 18
+    if len(short_lines) >= 10 and len(short_lines) / max(len(lines), 1) >= 0.72:
+        penalty += 24 if not has_code_signal and not has_definition_signal and sentence_like_count <= 2 else 8
+    if _is_question_list_like(chunk) and answer_score < 10:
+        penalty += 12
+
+    canonical_question = _canonical_search_text(question)
+    canonical_chunk = _canonical_search_text(chunk)
+    exact_match_only_title = (
+        canonical_question
+        and canonical_question in canonical_chunk
+        and answer_score < 6
+        and any(canonical_question in _canonical_search_text(line) and len(line) <= 42 for line in short_lines)
+    )
+    if exact_match_only_title:
+        penalty += 10
+
+    return penalty
+
+
 def _quality_score(chunk: str) -> int:
     """
     片段质量分，正文高，目录/导航低。
     """
     score = 0
+    score += _answer_signal_score(chunk)
+    score -= _topic_list_penalty(chunk, "")
+
     if _is_toc_like(chunk):
         score -= 18
     if _is_question_list_like(chunk):
@@ -171,8 +480,74 @@ def _quality_score(chunk: str) -> int:
     if any(keyword in chunk for keyword in ["原因", "方法", "优化", "避免", "减少", "例如", "比如"]):
         score += 3
 
+    if any(keyword in chunk for keyword in ["采用", "方式", "viewport", "border-image", "scale()"]):
+        score += 4
+
+    if any(keyword in chunk for keyword in ["函数", "触发", "频率", "setTimeout", "clearTimeout", "timer"]):
+        score += 3
+
     if len(chunk.strip()) >= 160:
         score += 1
+
+    return score
+
+
+def _intent_score(question: str, chunk: str) -> int:
+    """
+    针对短问题做轻量意图匹配，避免只靠散词交集把结果带偏。
+    """
+    score = 0
+    canonical_question = _canonical_search_text(question)
+    canonical_chunk = _canonical_search_text(chunk)
+
+    question_measures = _measure_terms(question)
+    chunk_measures = _measure_terms(chunk)
+    if question_measures:
+        if question_measures & chunk_measures:
+            score += 18
+        else:
+            score -= 8
+
+    phrase_candidates = [
+        token
+        for token in [
+            "0.5px",
+            "画一条",
+            "一条线",
+            "的线",
+            "怎么画",
+            "如何画",
+            "如何实现",
+        ]
+        if token in canonical_question
+    ]
+    for phrase in phrase_candidates:
+        if phrase in canonical_chunk:
+            score += 6
+
+    if "线" in canonical_question and "线" in canonical_chunk:
+        score += 5
+    if any(word in canonical_question for word in ["画", "实现"]) and any(
+        word in canonical_chunk for word in ["画", "实现", "采用", "方式"]
+    ):
+        score += 5
+
+    if any(word in canonical_question for word in ["怎么", "如何"]) and any(
+        word in canonical_chunk for word in ["采用", "方式", "可以", "通过"]
+    ):
+        score += 4
+
+    question_ascii_terms = _ascii_terms(question)
+    chunk_ascii_terms = _ascii_terms(chunk)
+    if question_ascii_terms:
+        if not (question_ascii_terms & chunk_ascii_terms):
+            score -= 18
+        has_definition_signal = any(
+            keyword in canonical_chunk
+            for keyword in ["直译成", "是一个", "相当于", "作用", "应用", "产生", "生成"]
+        )
+        if has_definition_signal and question_ascii_terms & chunk_ascii_terms:
+            score += 8
 
     return score
 
@@ -180,6 +555,8 @@ def _quality_score(chunk: str) -> int:
 def _is_question_heading(line: str) -> bool:
     normalized = line.strip()
     if not normalized:
+        return False
+    if re.match(r"^第\d+页$", normalized):
         return False
     if re.match(r"^[、•·]\s*", normalized):
         return True
@@ -219,7 +596,16 @@ def _line_score(line: str, question_tokens: Set[str]) -> int:
     return score
 
 
-def _extract_focus_excerpt(text: str, question: str, max_chars: int = 700) -> str:
+def _line_matches_question(line: str, question_tokens: Set[str]) -> bool:
+    """
+    判断一行是否命中问题关键词，同时兼容 PDF 抽取出的 `BF  C`、`0. 5px` 这类空格错位。
+    """
+    lowered = line.lower()
+    canonical_line = _canonical_search_text(line)
+    return any(token in lowered or _canonical_search_text(token) in canonical_line for token in question_tokens)
+
+
+def _extract_focus_excerpt(text: str, question: str, max_chars: int = 1600) -> str:
     """
     从拼接后的上下文里截取最相关的答案段，尽量避开题纲和下一题内容。
     """
@@ -244,7 +630,7 @@ def _extract_focus_excerpt(text: str, question: str, max_chars: int = 700) -> st
         index
         for index, line in enumerate(lines)
         if _is_question_heading(line)
-        and any(token in line.lower() for token in question_tokens)
+        and _line_matches_question(line, question_tokens)
     ]
 
     best_heading_excerpt = ""
@@ -272,6 +658,33 @@ def _extract_focus_excerpt(text: str, question: str, max_chars: int = 700) -> st
 
     if best_heading_excerpt and best_heading_score > 0:
         return best_heading_excerpt[:max_chars].strip()
+
+    question_occurrence_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if _line_matches_question(line, question_tokens)
+    ]
+
+    if question_occurrence_indexes:
+        start_index = question_occurrence_indexes[0]
+        while start_index > 0 and not _is_question_heading(lines[start_index]):
+            start_index -= 1
+            if re.match(r"^第\d+页$", lines[start_index].strip()):
+                start_index += 1
+                break
+
+        selected_lines: List[str] = []
+        for index in range(start_index, len(lines)):
+            line = lines[index]
+            if index > start_index and _is_question_heading(line):
+                break
+            selected_lines.append(line)
+            if len("\n".join(selected_lines)) >= max_chars:
+                break
+
+        excerpt = "\n".join(_dedupe_lines(selected_lines)).strip()
+        if excerpt:
+            return excerpt[:max_chars].strip()
 
     scored_lines = [
         (_line_score(line, question_tokens), index, line)
@@ -304,7 +717,7 @@ def _extract_focus_excerpt(text: str, question: str, max_chars: int = 700) -> st
         if (
             index > best_index
             and _is_question_heading(line)
-            and not any(token in line.lower() for token in question_tokens)
+            and not _line_matches_question(line, question_tokens)
         ):
             break
 
@@ -391,9 +804,28 @@ def _has_topic_boundary(chunk: str) -> bool:
     """
     判断片段是否进入了下一题或下一段问题清单。
     """
+    normalized = chunk.strip()
+    if re.match(r"^第\d+页(?:\n|$)", normalized):
+        normalized = re.sub(r"^第\d+页\n?", "", normalized, count=1).strip()
+
     return bool(
-        re.search(r"(?:^|\n)(?:第\d+题[:：]?|\d+[、.．])", chunk)
+        re.search(r"(?:^|\n)(?:第\d+题[:：]?|\d+[、.．])", normalized)
     )
+
+
+def _looks_like_next_question(chunk: str, question: str) -> bool:
+    normalized = chunk.strip()
+    normalized = re.sub(r"^第\d+页\n?", "", normalized, count=1).strip()
+
+    if not _has_topic_boundary(normalized):
+        return False
+
+    question_tokens = {
+        token
+        for token in _tokenize(question)
+        if len(token) >= 2 and not token.isdigit()
+    }
+    return not any(token in normalized for token in question_tokens)
 
 
 class FaissStore:
@@ -428,39 +860,82 @@ class FaissStore:
         如果传入 document_id，则删除该文档的旧版本
         否则按 knowledge_base_id + title 组合去重
         """
-        entries = _load_entries()
+        with _store_lock():
+            entries = _load_entries_unlocked()
 
-        # 【去重】删除旧版本
-        # 优先保留同一知识库下当前标题的最新版本，避免重复入库后旧切片继续参与检索。
-        filtered_entries = [
-            entry
-            for entry in entries
-            if not (
-                entry["knowledgeBaseId"] == knowledge_base_id
-                and entry["title"] == title
-            )
-        ]
-        if document_id:
+            # 【去重】删除旧版本
+            # 优先保留同一知识库下当前标题的最新版本，避免重复入库后旧切片继续参与检索。
             filtered_entries = [
-                entry for entry in filtered_entries if entry.get("documentId") != document_id
+                entry
+                for entry in entries
+                if not (
+                    entry["knowledgeBaseId"] == knowledge_base_id
+                    and entry["title"] == title
+                )
             ]
+            if document_id:
+                filtered_entries = [
+                    entry for entry in filtered_entries if entry.get("documentId") != document_id
+                ]
 
-        # 【批量插入】将新片段和向量添加到列表
-        chunk_count = len(chunks)
-        filtered_entries.extend(
-            {
-                "documentId": document_id,
-                "knowledgeBaseId": knowledge_base_id,
-                "title": title,
-                "chunk": chunk,
-                "vector": vector,
-                "chunkIndex": index,
-                "chunkCount": chunk_count,
-            }
-            for index, (chunk, vector) in enumerate(zip(chunks, vectors))
-        )
+            # 【批量插入】将新片段和向量添加到列表
+            chunk_count = len(chunks)
+            filtered_entries.extend(
+                {
+                    "documentId": document_id,
+                    "knowledgeBaseId": knowledge_base_id,
+                    "title": title,
+                    "chunk": chunk,
+                    "vector": vector,
+                    "chunkIndex": index,
+                    "chunkCount": chunk_count,
+                }
+                for index, (chunk, vector) in enumerate(zip(chunks, vectors))
+            )
 
-        _save_entries(filtered_entries)
+            _save_entries_unlocked(filtered_entries)
+
+    def delete_document(self, document_id: str) -> int:
+        """
+        删除某个文档对应的全部切片，避免文档删除后旧索引残留。
+        """
+        if not document_id:
+            return 0
+
+        with _store_lock():
+            entries = _load_entries_unlocked()
+            filtered_entries = [
+                entry
+                for entry in entries
+                if entry.get("documentId") != document_id
+            ]
+            removed_count = len(entries) - len(filtered_entries)
+
+            if removed_count:
+                _save_entries_unlocked(filtered_entries)
+
+            return removed_count
+
+    def delete_knowledge_base(self, knowledge_base_id: str) -> int:
+        """
+        删除整个知识库下的全部切片。
+        """
+        if not knowledge_base_id:
+            return 0
+
+        with _store_lock():
+            entries = _load_entries_unlocked()
+            filtered_entries = [
+                entry
+                for entry in entries
+                if entry.get("knowledgeBaseId") != knowledge_base_id
+            ]
+            removed_count = len(entries) - len(filtered_entries)
+
+            if removed_count:
+                _save_entries_unlocked(filtered_entries)
+
+            return removed_count
 
     def _group_entries_by_document(self, entries: List[Dict]) -> Dict[str, List[Dict]]:
         grouped_entries: Dict[str, List[Dict]] = {}
@@ -519,16 +994,12 @@ class FaissStore:
             if not chunk:
                 continue
 
-            if (
-                index > matched_index
-                and _has_topic_boundary(chunk)
-                and not any(token in chunk for token in _tokenize(question))
-            ):
+            if index > matched_index and _looks_like_next_question(chunk, question):
                 break
 
             window_entries.append(entry)
             merged_text = "\n".join(item["chunk"].strip() for item in window_entries if item.get("chunk"))
-            if len(merged_text) >= 900:
+            if len(merged_text) >= 1600:
                 break
 
         merged_chunk = "\n".join(
@@ -545,7 +1016,7 @@ class FaissStore:
         self,
         question: str,
         knowledge_base_id: Optional[str],
-        limit: int = 3
+        limit: int = 4
     ) -> List[str]:
         """
         检索与问题最相关的片段
@@ -582,14 +1053,23 @@ class FaissStore:
         # 【评分】计算每个片段与问题的相似度
         scored_entries = []
         for entry in candidate_entries:
-            chunk_tokens = _tokenize(entry["chunk"])
-            # 相似度 = 共同词的数量
-            score = len(question_tokens & chunk_tokens)
             title_tokens = _tokenize(entry.get("title", ""))
             title_bonus = len(question_tokens & title_tokens)
-            phrase_bonus = 1 if question.strip() and question.strip() in entry["chunk"] else 0
+            lexical_score = _lexical_relevance_score(question, entry["chunk"])
+            phrase_bonus = 14 if _canonical_search_text(question.strip()) in _canonical_search_text(entry["chunk"]) else 0
             quality_bonus = _quality_score(entry["chunk"])
-            final_score = score * 2 + title_bonus + phrase_bonus + quality_bonus
+            intent_bonus = _intent_score(question, entry["chunk"])
+            answer_bonus = _answer_signal_score(entry["chunk"])
+            topic_penalty = _topic_list_penalty(entry["chunk"], question)
+            final_score = (
+                lexical_score
+                + title_bonus
+                + phrase_bonus
+                + quality_bonus
+                + intent_bonus
+                + answer_bonus
+                - topic_penalty
+            )
             scored_entries.append((final_score, quality_bonus, entry))
 
         # 【排序】按分数降序，分数相同则按片段长度升序（短片段通常更精准）
@@ -602,12 +1082,24 @@ class FaissStore:
             reverse=True,
         )
 
-        # 【取 Top-K】优先返回有匹配的，否则返回前 K 个
+        top_score = scored_entries[0][0] if scored_entries else 0
+        min_relative_score = max(12, int(top_score * 0.45))
+
+        # 【取 Top-K】优先返回强相关正文，避免把仅仅“沾边”的题纲片段送去回答层。
         preferred_entries = [
-            item for item in scored_entries if item[1] > -8 and item[0] > 0
+            item
+            for item in scored_entries
+            if item[0] > 0
+            and item[0] >= min_relative_score
+            and item[1] > -8
+            and (not _is_toc_like(item[2]["chunk"]) or _answer_signal_score(item[2]["chunk"]) >= 8)
+            and _topic_list_penalty(item[2]["chunk"], question) < 18
         ]
         candidate_ranked_entries = preferred_entries or [
-            item for item in scored_entries if item[0] > 0
+            item
+            for item in scored_entries
+            if item[0] > 0
+            and item[0] >= max(8, min_relative_score - 4)
         ]
 
         top_entries: List[Dict] = []
@@ -632,11 +1124,12 @@ class FaissStore:
             if len(top_entries) >= limit:
                 break
 
-        if not top_entries:
-            top_entries = [entry for _, _, entry in scored_entries[:limit]]
+        if not top_entries or top_score < 8:
+            return []
 
         merged_contexts: List[str] = []
         seen_contexts: Set[str] = set()
+        question_ascii_terms = _ascii_terms(question)
 
         for entry in top_entries:
             document_key = (
@@ -646,6 +1139,13 @@ class FaissStore:
             document_entries = grouped_entries.get(document_key, [entry])
             merged_context = self._expand_context(entry, document_entries, question)
             _, _, excerpt = merged_context.partition(":")
+            excerpt_ascii_terms = _ascii_terms(excerpt)
+            if (
+                question_ascii_terms
+                and merged_contexts
+                and not (question_ascii_terms & excerpt_ascii_terms)
+            ):
+                continue
             if _excerpt_value_score(excerpt, question) <= 0 and merged_contexts:
                 continue
             normalized_context = _normalize_text(merged_context)

@@ -12,7 +12,9 @@
  * 这样前端可以正常展示，不至于崩溃
  */
 import { Injectable, Logger } from "@nestjs/common";
+import { DocumentStatus } from "@prisma/client";
 import { ChatRequestDto, ChatSessionSyncDto } from "@ai-kb/shared";
+import { PrismaService } from "../../prisma/prisma.service";
 import { AiService } from "../ai/ai.service";
 import { listChatHistory, saveChatHistory } from "./chat-history.store";
 import { listChatSessions, saveChatSessions } from "./chat-session.store";
@@ -22,7 +24,54 @@ export class ChatService {
   // Logger 用于记录日志，方便调试和排查问题
   private readonly logger = new Logger(ChatService.name);
 
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly prisma: PrismaService
+  ) {}
+
+  private isEmptyIndexResponse(response: { answer?: string; contexts?: string[] }) {
+    return Boolean(
+      response.contexts?.some((context) => context.includes("当前还没有可检索到的入库片段"))
+      || response.answer?.includes("当前知识库还没有可直接回答这个问题的入库片段")
+    );
+  }
+
+  private async repairKnowledgeBaseIndex(knowledgeBaseId: string) {
+    const documents = await this.prisma.document.findMany({
+      where: {
+        knowledgeBaseId
+      },
+      orderBy: {
+        createdAt: "asc"
+      }
+    });
+
+    if (documents.length === 0) {
+      return 0;
+    }
+
+    for (const document of documents) {
+      await this.aiService.ingestDocument({
+        documentId: document.id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        title: document.title,
+        content: document.content
+      });
+
+      if (document.status !== DocumentStatus.INDEXED) {
+        await this.prisma.document.update({
+          where: {
+            id: document.id
+          },
+          data: {
+            status: DocumentStatus.INDEXED
+          }
+        });
+      }
+    }
+
+    return documents.length;
+  }
 
   /**
    * 发起问答
@@ -42,7 +91,18 @@ export class ChatService {
   async ask(body: ChatRequestDto) {
     try {
       // 【正常流程】调用 AI 服务获取答案
-      const response = await this.aiService.askQuestion(body);
+      let response = await this.aiService.askQuestion(body);
+
+      if (body.knowledgeBaseId && this.isEmptyIndexResponse(response)) {
+        const repairedCount = await this.repairKnowledgeBaseIndex(body.knowledgeBaseId);
+
+        if (repairedCount > 0) {
+          this.logger.warn(
+            `AI index was empty for knowledge base ${body.knowledgeBaseId}; auto-reindexed ${repairedCount} document(s) and retried chat.`
+          );
+          response = await this.aiService.askQuestion(body);
+        }
+      }
 
       // 保存问答历史（用于 Dashboard 统计）
       await saveChatHistory({

@@ -35,19 +35,19 @@ async function main() {
     {
       title: "前端工程化清单",
       content: "包含构建流程、CI、监控、性能优化等主题。",
-      status: DocumentStatus.INDEXED,
+      status: DocumentStatus.PENDING,
       knowledgeBaseId: frontendKb.id
     },
     {
       title: "组件设计模式",
       content: "总结可复用组件、状态管理和交互抽象方式。",
-      status: DocumentStatus.INDEXED,
+      status: DocumentStatus.PENDING,
       knowledgeBaseId: frontendKb.id
     },
     {
       title: "NestJS 模块设计",
       content: "记录模块边界、依赖注入、守卫和拦截器组织方式。",
-      status: DocumentStatus.INDEXED,
+      status: DocumentStatus.PENDING,
       knowledgeBaseId: nestKb.id
     }
   ];

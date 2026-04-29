@@ -29,6 +29,84 @@ type PdfTextItem = {
   y: number;
 };
 
+const COMPACT_TECH_TERMS = [
+  "BFC",
+  "CSSOM",
+  "DOM",
+  "HTML",
+  "HTTP",
+  "HTTPS",
+  "TCP",
+  "UDP",
+  "JS",
+  "TS",
+  "meta",
+  "link",
+  "import",
+  "transition",
+  "animation",
+  "visibility",
+  "display",
+  "overflow",
+  "position",
+  "absolute",
+  "relative",
+  "fixed",
+  "float",
+  "inline-block",
+  "table-cell",
+  "table-caption",
+  "inline-flex",
+  "flex",
+  "grid",
+  "margin",
+  "padding",
+  "border",
+  "viewport",
+  "transform",
+  "scale",
+  "after",
+];
+
+function buildSpacedAsciiPattern(term: string) {
+  const escaped = term
+    .split("")
+    .map((char) => {
+      if (/[A-Za-z0-9]/.test(char)) {
+        return `${char}\\s*`;
+      }
+
+      return `\\${char}\\s*`;
+    })
+    .join("");
+
+  return new RegExp(escaped.trimEnd(), "gi");
+}
+
+function normalizeExtractedText(text: string) {
+  let normalized = text
+    .replace(/\u0000/g, " ")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/\r\n/g, "\n");
+
+  normalized = normalized.replace(/(\d)\s*\.\s*(\d+)\s*(px|rem|em|%)\b/gi, "$1.$2$3");
+  normalized = normalized.replace(/@\s+import\b/gi, "@import");
+  normalized = normalized.replace(/\b([A-Z])\s+([A-Z])(?:\s+([A-Z]))+\b/g, (match) =>
+    match.replace(/\s+/g, "")
+  );
+
+  for (const term of COMPACT_TECH_TERMS) {
+    normalized = normalized.replace(buildSpacedAsciiPattern(term), term);
+  }
+
+  normalized = normalized
+    .split("\n")
+    .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
+    .join("\n");
+
+  return normalized.trim();
+}
+
 function renderPdfPage(pageData: PdfPageData) {
   const renderOptions = {
     normalizeWhitespace: false,
@@ -45,7 +123,7 @@ function renderPdfPage(pageData: PdfPageData) {
       }))
       .filter((item) => item.str.trim().length > 0);
 
-    return groupTextItemsByVisualLines(items).join("\n");
+    return normalizeExtractedText(groupTextItemsByVisualLines(items).join("\n"));
   });
 }
 
@@ -130,8 +208,8 @@ export async function extractPdfTextWithPages(fileBuffer: Buffer): Promise<Extra
     });
 
     return {
-      pageTexts,
-      text: parsedPdf.text.trim(),
+      pageTexts: pageTexts.map((pageText) => normalizeExtractedText(pageText)),
+      text: normalizeExtractedText(parsedPdf.text),
     };
   } catch {
     throw new BadRequestException("PDF 解析失败。请确认文件未加密、未损坏，或先另存为新的 PDF 后重试。");

@@ -1,14 +1,19 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { DocumentStatus } from "@prisma/client";
 import { readFile } from "fs/promises";
 import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto } from "@ai-kb/shared";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AiService } from "../ai/ai.service";
 import { getDocumentAsset } from "../documents/document-asset.store";
 import { getDocumentPreview, saveDocumentPreview } from "../documents/document-preview.store";
 import { extractPdfTextWithPages } from "../documents/pdf-extractor";
 
 @Injectable()
 export class KnowledgeBaseService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService
+  ) {}
 
   async list() {
     // Querying with `_count` is a very common Prisma pattern.
@@ -181,6 +186,91 @@ export class KnowledgeBaseService {
     };
   }
 
+  private async getDocumentPageTexts(documentId: string) {
+    const savedPreview = await getDocumentPreview(documentId);
+    if (savedPreview?.pageTexts?.length) {
+      return savedPreview.pageTexts;
+    }
+
+    const asset = await getDocumentAsset(documentId);
+    if (!asset || asset.mimeType !== "application/pdf") {
+      return undefined;
+    }
+
+    try {
+      const fileBuffer = await readFile(asset.absolutePath);
+      const extractedPreview = await extractPdfTextWithPages(fileBuffer);
+      const pageTexts = extractedPreview.pageTexts
+        .map((pageText) => pageText.replace(/\r\n/g, "\n").trim())
+        .filter((pageText) => pageText.length > 0);
+
+      if (pageTexts.length) {
+        await saveDocumentPreview(documentId, pageTexts);
+        return pageTexts;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
+  }
+
+  async rebuildIndex(id: string) {
+    const existingKnowledgeBase = await this.prisma.knowledgeBase.findUnique({
+      where: {
+        id
+      },
+      include: {
+        documents: {
+          orderBy: {
+            createdAt: "asc"
+          }
+        }
+      }
+    });
+
+    if (!existingKnowledgeBase) {
+      throw new NotFoundException("Knowledge base not found.");
+    }
+
+    await this.aiService.deleteKnowledgeBaseIndex(id);
+
+    if (existingKnowledgeBase.documents.length === 0) {
+      return {
+        id,
+        rebuiltCount: 0
+      };
+    }
+
+    for (const document of existingKnowledgeBase.documents) {
+      const pageTexts = await this.getDocumentPageTexts(document.id);
+
+      await this.aiService.ingestDocument({
+        documentId: document.id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        title: document.title,
+        content: document.content,
+        pageTexts
+      });
+
+      if (document.status !== DocumentStatus.INDEXED) {
+        await this.prisma.document.update({
+          where: {
+            id: document.id
+          },
+          data: {
+            status: DocumentStatus.INDEXED
+          }
+        });
+      }
+    }
+
+    return {
+      id,
+      rebuiltCount: existingKnowledgeBase.documents.length
+    };
+  }
+
   async remove(id: string) {
     const existingKnowledgeBase = await this.prisma.knowledgeBase.findUnique({
       where: {
@@ -190,6 +280,12 @@ export class KnowledgeBaseService {
 
     if (!existingKnowledgeBase) {
       throw new NotFoundException("Knowledge base not found.");
+    }
+
+    try {
+      await this.aiService.deleteKnowledgeBaseIndex(id);
+    } catch {
+      // Keep the knowledge base deletion flow available even if AI cleanup fails.
     }
 
     // Documents reference the knowledge base with a foreign key, so we delete

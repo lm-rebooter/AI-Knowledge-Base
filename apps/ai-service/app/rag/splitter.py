@@ -48,6 +48,7 @@ splitter = RecursiveCharacterTextSplitter(
 )
 ```
 """
+import re
 from typing import List, Optional
 
 
@@ -67,6 +68,34 @@ def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
 
         if start + chunk_size >= len(normalized_text):
             break
+
+    return chunks
+
+
+def _split_by_question_blocks(text: str) -> List[str]:
+    normalized_text = text.strip()
+    if not normalized_text:
+        return []
+
+    heading_pattern = re.compile(r"(?m)(?=^(?:第\d+题[:：]?|\d+[、.．]))")
+    parts = [part.strip() for part in heading_pattern.split(normalized_text) if part.strip()]
+
+    if len(parts) <= 1:
+        return [normalized_text]
+
+    return parts
+
+
+def _chunk_page_text(page_text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+    blocks = _split_by_question_blocks(page_text)
+    chunks: List[str] = []
+
+    for block in blocks:
+        if len(block) <= chunk_size:
+            chunks.append(block)
+            continue
+
+        chunks.extend(_chunk_text(block, chunk_size, chunk_overlap))
 
     return chunks
 
@@ -109,7 +138,7 @@ def split_document(
             if not normalized_page_text:
                 continue
 
-            for chunk in _chunk_text(normalized_page_text, chunk_size, chunk_overlap):
+            for chunk in _chunk_page_text(normalized_page_text, chunk_size, chunk_overlap):
                 page_chunks.append(f"第{page_index}页\n{chunk}")
 
         if page_chunks:

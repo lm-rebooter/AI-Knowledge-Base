@@ -75,4 +75,20 @@ export class AiService {
 
     return response.data;
   }
+
+  async deleteDocumentIndex(documentId: string) {
+    const response = await firstValueFrom(
+      this.httpService.delete(`${this.baseUrl}/api/index/documents/${documentId}`)
+    );
+
+    return response.data;
+  }
+
+  async deleteKnowledgeBaseIndex(knowledgeBaseId: string) {
+    const response = await firstValueFrom(
+      this.httpService.delete(`${this.baseUrl}/api/index/knowledge-bases/${knowledgeBaseId}`)
+    );
+
+    return response.data;
+  }
 }
