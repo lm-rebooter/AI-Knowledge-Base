@@ -159,6 +159,9 @@ def _sentence_score(sentence: str, question_tokens: List[str]) -> int:
     if any(keyword in sentence for keyword in ["方法", "优化", "避免", "减少", "例如", "通过", "采用", "可以"]):
         score += 2
 
+    if any(keyword in sentence for keyword in ["就是", "是指", "完全的拷贝", "互相分离", "不会影响"]):
+        score += 5
+
     if re.search(r"[:：]", sentence):
         score += 1
 
@@ -263,6 +266,7 @@ def _collect_code_block(lines: List[str], start_index: int, stop_markers: List[s
 
 def _question_intent(question: str) -> str:
     normalized = question.replace(" ", "")
+    compact = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", normalized)
     if any(keyword in normalized for keyword in ["区别", "不同", "对比", "比较", "差异"]):
         return "comparison"
     if any(keyword in normalized for keyword in ["怎么", "如何", "怎样", "步骤", "做法", "实现", "方法"]):
@@ -270,6 +274,8 @@ def _question_intent(question: str) -> str:
     if any(keyword in normalized for keyword in ["哪些", "有什么", "几种", "方式", "方案"]):
         return "list"
     if any(keyword in normalized for keyword in ["是什么", "啥是", "含义", "定义", "作用", "原理"]):
+        return "definition"
+    if compact and len(compact) <= 8:
         return "definition"
     return "generic"
 
@@ -372,6 +378,14 @@ def _build_summary_lines(intent: str, evidence_items: List[Dict]) -> List[str]:
         return summary_sentences[:4]
     if intent in {"how", "list"}:
         return summary_sentences[:5]
+    if intent == "definition":
+        definition_first = [
+            sentence
+            for sentence in summary_sentences
+            if any(keyword in sentence for keyword in ["就是", "是指", "是一个", "相当于", "不会影响", "互相分离"])
+        ]
+        ordered = _dedupe_sentences(definition_first + summary_sentences)
+        return ordered[:3]
     return summary_sentences[:3]
 
 
@@ -384,6 +398,10 @@ def _resolve_summary_lines(
         method_lines = _method_summary_lines(context_blocks)
         if method_lines:
             return method_lines
+    if intent == "definition":
+        definition_lines = _definition_summary_lines(context_blocks)
+        if definition_lines:
+            return definition_lines
     return _build_summary_lines(intent, evidence_items)
 
 
@@ -491,6 +509,31 @@ def _method_summary_lines(context_blocks: List[Tuple[str, str]]) -> List[str]:
     return summary_lines
 
 
+def _definition_summary_lines(context_blocks: List[Tuple[str, str]]) -> List[str]:
+    summary_lines: List[str] = []
+
+    for _, body in context_blocks:
+        for line in _normalize_context_body_for_display(body).splitlines():
+            cleaned = line.strip()
+            if not cleaned:
+                continue
+            if cleaned in {"JavaScript", "TypeScript"}:
+                break
+            if len(cleaned) <= 4:
+                continue
+            if "区别" in cleaned and len(cleaned) <= 20:
+                continue
+            if cleaned.endswith(":") or cleaned.endswith("："):
+                continue
+            if any(marker in cleaned for marker in ["//", "import ", "function ", "const ", "let "]):
+                continue
+            summary_lines.append(cleaned)
+            if len(summary_lines) >= 3:
+                return summary_lines
+
+    return summary_lines
+
+
 def _extract_question_focused_body(body: str, question_tokens: List[str]) -> str:
     lines = [line.rstrip() for line in _normalize_context_body_for_display(body).splitlines() if line.strip()]
     if not lines:
@@ -511,7 +554,23 @@ def _extract_question_focused_body(body: str, question_tokens: List[str]) -> str
     selected_lines: List[str] = []
     for index in range(start_index, len(lines)):
         line = lines[index]
-        if selected_lines and re.match(r"^(?:第\d+题[:：]?|\d+[、.．])", line):
+        if selected_lines and re.match(r"^(?:第\d+题[:：]?|\d+[、.．]|\d+\s+\S+)", line):
+            break
+        if (
+            selected_lines
+            and len(line) <= 36
+            and not any(
+                token not in QUESTION_STOPWORDS
+                and len(token) >= 2
+                and (_canonical_text(token) in _canonical_text(line) or token in line.lower())
+                for token in question_tokens
+            )
+            and not any(marker in line for marker in ["JavaScript", "TypeScript", "immer", "cloneDeep", "lodash"])
+            and (
+                line.startswith(("讲讲", "什么是", "如何", "为什么", "实现", "类的", "对象", "事件"))
+                or ("？" in line or "?" in line)
+            )
+        ):
             break
         if selected_lines and any(
             marker in line for marker in ["如何实现图片在某个容器中居中的", "了解重绘和重排", "响应式设计"]
@@ -626,28 +685,102 @@ def _build_contextual_answer(
     return f"{base_answer}\n\n对应上下文：\n{formatted_context_blocks}"
 
 
-def _build_debounce_throttle_answer(question: str, contexts: List[str], source_titles: List[str]) -> str:
+def _pick_best_prefixed_line(lines: List[str], prefix: str) -> str:
+    candidates = [line.strip() for line in lines if line.strip().startswith(prefix)]
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda line: (len(line), line.count(" ")), reverse=True)
+    return candidates[0]
+
+
+def _collect_function_blocks(lines: List[str], pattern: str, stop_markers: List[str]) -> List[str]:
+    blocks: List[str] = []
+    for index, line in enumerate(lines):
+        if re.search(pattern, line):
+            block = "\n".join(_collect_code_block(lines, index, stop_markers)).strip()
+            if block:
+                blocks.append(block)
+    return blocks
+
+
+def _pick_best_function_block(blocks: List[str], expected_name: str) -> str:
+    if not blocks:
+        return ""
+
+    scored_blocks = []
+    for block in blocks:
+        lines = [line for line in block.splitlines() if line.strip()]
+        score = len(lines)
+        if expected_name in block:
+            score += 10
+        if "setTimeout" in block:
+            score += 3
+        if "return function" in block:
+            score += 3
+        if "call(" in block:
+            score += 2
+        if "flag = false" in block and "flag = true" in block:
+            score += 4
+        if "let pre = 0" in block:
+            score += 2
+        if re.search(r"^[A-Za-z]\)\s*\{$", lines[0]) if lines else False:
+            score -= 6
+        if any(line.strip() in {"s) {", "t now = new Date()"} for line in lines):
+            score -= 12
+        if any("fn.call(tha" in line for line in lines):
+            score -= 12
+        scored_blocks.append((score, block))
+
+    scored_blocks.sort(key=lambda item: item[0], reverse=True)
+    return scored_blocks[0][1]
+
+
+def _normalize_code_block(block: str) -> str:
+    cleaned_lines: List[str] = []
+    seen = set()
+
+    for raw_line in block.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line in {"JavaScript", "s) {", "t now = new Date()"}:
+            continue
+        if re.match(r"^(第\d+页|\d+)$", line):
+            continue
+        if "fn.call(tha" in line and "that" not in line:
+            continue
+
+        line = line.replace("delay,...args", "delay, ...args")
+        line = line.replace("that,...args", "that, ...args")
+        line = line.replace("function () {", "function () {")
+
+        dedupe_key = re.sub(r"\s+", "", line)
+        if dedupe_key in seen and not re.fullmatch(r"[{}]+", dedupe_key):
+            continue
+        seen.add(dedupe_key)
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines).strip()
+
+
+def _build_debounce_throttle_answer(
+    question: str,
+    contexts: List[str],
+    source_titles: List[str],
+    context_blocks: List[Tuple[str, str]],
+) -> str:
     body = "\n".join(_strip_context_prefix(context)[1] for context in contexts)
     lines = [_clean_pdf_line(line) for line in body.splitlines() if _clean_pdf_line(line)]
 
-    debounce_definition = next((line for line in lines if line.startswith("防抖:")), "")
-    throttle_definition = next((line for line in lines if line.startswith("节流:")), "")
-
-    debounce_start = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if re.search(r"\bfunction\s+debounce\b", line)
-        ),
-        -1,
+    debounce_definition = _pick_best_prefixed_line(lines, "防抖:")
+    throttle_definition = _pick_best_prefixed_line(lines, "节流:")
+    debounce_code = _pick_best_function_block(
+        _collect_function_blocks(lines, r"\bfunction\s+debounce\b", ["节流函数", "function throttle"]),
+        "function debounce",
     )
-    throttle_start = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if re.search(r"\bfunction\s+throttle\b", line)
-        ),
-        -1,
+    throttle_code = _pick_best_function_block(
+        _collect_function_blocks(lines, r"\bfunction\s+throttle\b", ["第43页", "对象深度克隆", "第\\d+页"]),
+        "function throttle",
     )
 
     parts = [f"关于「{question}」，知识库里命中的内容可以这样整理："]
@@ -657,20 +790,28 @@ def _build_debounce_throttle_answer(question: str, contexts: List[str], source_t
     if throttle_definition:
         parts.append(throttle_definition)
 
-    if debounce_start >= 0:
-        debounce_code = "\n".join(
-            _collect_code_block(lines, debounce_start, ["节流函数", "function throttle"])
-        )
-        if debounce_code:
-            parts.append(f"防抖函数示例：\n```javascript\n{debounce_code}\n```")
+    if debounce_code:
+        parts.append(f"防抖函数示例：\n```javascript\n{_normalize_code_block(debounce_code)}\n```")
 
-    if throttle_start >= 0:
-        throttle_code = "\n".join(_collect_code_block(lines, throttle_start, []))
-        if throttle_code:
-            parts.append(f"节流函数示例：\n```javascript\n{throttle_code}\n```")
+    if throttle_code:
+        parts.append(f"节流函数示例：\n```javascript\n{_normalize_code_block(throttle_code)}\n```")
 
     source_line = "、".join(source_titles[:3]) if source_titles else "当前命中文档"
     parts.append(f"来源文档：{source_line}")
+
+    curated_context_lines: List[str] = []
+    if debounce_definition:
+        curated_context_lines.append(debounce_definition)
+    if throttle_definition:
+        curated_context_lines.append(throttle_definition)
+    if debounce_code:
+        curated_context_lines.append("防抖函数:\n" + _normalize_code_block(debounce_code))
+    if throttle_code:
+        curated_context_lines.append("节流函数:\n" + _normalize_code_block(throttle_code))
+
+    if curated_context_lines:
+        context_title = context_blocks[0][0] if context_blocks else source_line
+        parts.append(f"对应上下文：\n《{context_title}》\n" + "\n\n".join(curated_context_lines))
 
     return "\n\n".join(parts)
 
@@ -734,7 +875,7 @@ def generate_answer(question: str, contexts: List[str]) -> str:
     context_blocks = _select_relevant_contexts(contexts, question_tokens, intent)
 
     if "防抖" in question and "节流" in question:
-        specialized_answer = _build_debounce_throttle_answer(question, contexts, source_titles)
+        specialized_answer = _build_debounce_throttle_answer(question, contexts, source_titles, context_blocks)
         if specialized_answer:
             return specialized_answer
 

@@ -251,6 +251,11 @@ def _phrase_candidates(question: str) -> Set[str]:
     return phrases
 
 
+def _has_core_query_terms(question: str) -> bool:
+    terms = _search_terms(question)
+    return any(len(term) >= 2 for term in terms)
+
+
 def _lexical_relevance_score(question: str, chunk: str) -> int:
     query_terms = _search_terms(question)
     if not query_terms:
@@ -1070,42 +1075,65 @@ class FaissStore:
                 + answer_bonus
                 - topic_penalty
             )
-            scored_entries.append((final_score, quality_bonus, entry))
+            scored_entries.append(
+                {
+                    "final_score": final_score,
+                    "quality_bonus": quality_bonus,
+                    "entry": entry,
+                    "lexical_score": lexical_score,
+                    "title_bonus": title_bonus,
+                    "phrase_bonus": phrase_bonus,
+                }
+            )
 
         # 【排序】按分数降序，分数相同则按片段长度升序（短片段通常更精准）
         scored_entries.sort(
             key=lambda item: (
-                item[0],                 # 综合分数（越高越好）
-                item[1],                 # 正文质量（越高越好）
-                -len(item[2]["chunk"]),  # 略偏向更完整的正文片段
+                item["final_score"],                 # 综合分数（越高越好）
+                item["quality_bonus"],               # 正文质量（越高越好）
+                -len(item["entry"]["chunk"]),       # 略偏向更完整的正文片段
             ),
             reverse=True,
         )
 
-        top_score = scored_entries[0][0] if scored_entries else 0
+        has_strict_matches = any(
+            item["lexical_score"] > 0 or item["title_bonus"] > 0 or item["phrase_bonus"] > 0
+            for item in scored_entries
+        )
+        strict_query = _has_core_query_terms(question)
+
+        if strict_query and has_strict_matches:
+            scored_entries = [
+                item
+                for item in scored_entries
+                if item["lexical_score"] > 0 or item["title_bonus"] > 0 or item["phrase_bonus"] > 0
+            ]
+
+        top_score = scored_entries[0]["final_score"] if scored_entries else 0
         min_relative_score = max(12, int(top_score * 0.45))
 
         # 【取 Top-K】优先返回强相关正文，避免把仅仅“沾边”的题纲片段送去回答层。
         preferred_entries = [
             item
             for item in scored_entries
-            if item[0] > 0
-            and item[0] >= min_relative_score
-            and item[1] > -8
-            and (not _is_toc_like(item[2]["chunk"]) or _answer_signal_score(item[2]["chunk"]) >= 8)
-            and _topic_list_penalty(item[2]["chunk"], question) < 18
+            if item["final_score"] > 0
+            and item["final_score"] >= min_relative_score
+            and item["quality_bonus"] > -8
+            and (not _is_toc_like(item["entry"]["chunk"]) or _answer_signal_score(item["entry"]["chunk"]) >= 8)
+            and _topic_list_penalty(item["entry"]["chunk"], question) < 18
         ]
         candidate_ranked_entries = preferred_entries or [
             item
             for item in scored_entries
-            if item[0] > 0
-            and item[0] >= max(8, min_relative_score - 4)
+            if item["final_score"] > 0
+            and item["final_score"] >= max(8, min_relative_score - 4)
         ]
 
         top_entries: List[Dict] = []
         selected_regions: Set[str] = set()
 
-        for score, _, entry in candidate_ranked_entries:
+        for item in candidate_ranked_entries:
+            entry = item["entry"]
             document_key = (
                 entry.get("documentId")
                 or f"{entry['knowledgeBaseId']}::{entry['title']}"
@@ -1130,6 +1158,7 @@ class FaissStore:
         merged_contexts: List[str] = []
         seen_contexts: Set[str] = set()
         question_ascii_terms = _ascii_terms(question)
+        strict_query = _has_core_query_terms(question)
 
         for entry in top_entries:
             document_key = (
@@ -1139,6 +1168,7 @@ class FaissStore:
             document_entries = grouped_entries.get(document_key, [entry])
             merged_context = self._expand_context(entry, document_entries, question)
             _, _, excerpt = merged_context.partition(":")
+            excerpt_score = _excerpt_value_score(excerpt, question)
             excerpt_ascii_terms = _ascii_terms(excerpt)
             if (
                 question_ascii_terms
@@ -1146,7 +1176,12 @@ class FaissStore:
                 and not (question_ascii_terms & excerpt_ascii_terms)
             ):
                 continue
-            if _excerpt_value_score(excerpt, question) <= 0 and merged_contexts:
+            if strict_query and (
+                _is_question_list_like(excerpt)
+                or excerpt_score < 4
+            ):
+                continue
+            if excerpt_score <= 0 and merged_contexts:
                 continue
             normalized_context = _normalize_text(merged_context)
             if normalized_context in seen_contexts:
